@@ -1,4 +1,0 @@
-Job Title: Machine Learning Web Engineer
-
-Job Description:
-We are looking for a backend engineer who can bridge the gap between machine learning and web development. The ideal candidate will have extensive experience building applications in Python and deploying them to the cloud. You will be responsible for taking predictive models and turning them into interactive web applications that our internal teams can use. You must be comfortable working in an Agile environment and managing databases. Experience with modern containerization tools is highly desirable.
