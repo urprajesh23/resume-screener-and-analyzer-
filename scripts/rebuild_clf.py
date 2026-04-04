@@ -9,10 +9,12 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
 
 
-DATASET_PATH = Path("UpdatedResumeDataSet.csv")
-TFIDF_PATH = Path("tfidf.pkl")
-ENCODER_PATH = Path("encoder.pkl")
-MODEL_PATH = Path("clf.pkl")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+DATASET_PATH = ROOT_DIR / "data" / "UpdatedResumeDataSet.csv"
+MODELS_DIR = ROOT_DIR / "models"
+TFIDF_PATH = MODELS_DIR / "tfidf.pkl"
+ENCODER_PATH = MODELS_DIR / "encoder.pkl"
+MODEL_PATH = MODELS_DIR / "clf.pkl"
 
 
 def clean_resume(text: str) -> str:
@@ -38,6 +40,8 @@ def main() -> None:
     if not DATASET_PATH.exists():
         raise FileNotFoundError(f"Dataset not found: {DATASET_PATH}")
 
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
     dataset = pd.read_csv(DATASET_PATH)
     validate_dataset(dataset)
 
@@ -62,7 +66,7 @@ def main() -> None:
     with open(MODEL_PATH, "wb") as model_file:
         pickle.dump(classifier, model_file)
 
-    print("Training complete. Created: tfidf.pkl, encoder.pkl, clf.pkl")
+    print(f"Training complete. Created: {TFIDF_PATH}, {ENCODER_PATH}, {MODEL_PATH}")
 
 
 if __name__ == "__main__":

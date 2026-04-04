@@ -10,15 +10,22 @@ import pickle
 import docx  # Extract text from Word file
 import PyPDF2  # Extract text from PDF
 import re
+from pathlib import Path
 from sentence_transformers import SentenceTransformer, util
 import spacy
 import pandas as pd
 from transformers import pipeline
 
-# Load pre-trained model and TF-IDF vectorizer (ensure these are saved earlier)
-svc_model = pickle.load(open('clf.pkl', 'rb'))  # Example file name, adjust as needed
-tfidf = pickle.load(open('tfidf.pkl', 'rb'))  # Example file name, adjust as needed
-le = pickle.load(open('encoder.pkl', 'rb'))  # Example file name, adjust as needed
+BASE_DIR = Path(__file__).resolve().parent
+MODELS_DIR = BASE_DIR / 'models'
+
+# Load pre-trained model artifacts.
+with open(MODELS_DIR / 'clf.pkl', 'rb') as clf_file:
+    svc_model = pickle.load(clf_file)
+with open(MODELS_DIR / 'tfidf.pkl', 'rb') as tfidf_file:
+    tfidf = pickle.load(tfidf_file)
+with open(MODELS_DIR / 'encoder.pkl', 'rb') as encoder_file:
+    le = pickle.load(encoder_file)
 
 # Hardcoded list of common tech/business skills for skill gap analysis
 COMMON_SKILLS = [

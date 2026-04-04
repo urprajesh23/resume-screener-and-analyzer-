@@ -33,5 +33,6 @@ Thumbs.db
 clf.pkl
 tfidf.pkl
 encoder.pkl
+models/*.pkl
 
 
