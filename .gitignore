@@ -1,0 +1,37 @@
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Environment and local config
+.env
+.env.*
+
+# IDE/editor files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Trained model artifacts (recreated via rebuild_clf.py)
+clf.pkl
+tfidf.pkl
+encoder.pkl
+
+

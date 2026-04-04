@@ -1,0 +1,22 @@
+Job Description & Skills for Resume 1 - [nlp_resume_1.pdf]
+Paste this into your ATS sidebar to test against Sarah's resume.
+
+Job Title: Machine Learning Web Engineer
+Job Description:
+We are looking for a backend engineer who can bridge the gap between machine learning and web development. The ideal candidate will have extensive experience building applications in Python and deploying them to the cloud. You will be responsible for taking predictive models and turning them into interactive web applications that our internal teams can use. You must be comfortable working in an Agile environment and managing databases. Experience with modern containerization tools is highly highly desirable.
+
+Required Skills (Comma-separated for your UI):
+Python, Streamlit, scikit-learn, AWS, Docker, SQL, Agile
+
+(Testing Note: Sarah's resume should score an "Excellent Match" for this JD, hitting almost all the required skills).
+
+
+🎯 Job Description & Skills for Resume 2 - [nlp_resume_2.pdf]
+Paste this into your ATS sidebar to test against David's resume.
+
+Job Title: Senior Marketing Analyst
+Job Description:
+Our growth team is seeking a data-driven Marketing Analyst to own our campaign reporting and customer segmentation. You will dive deep into our marketing funnels, set up rigorous A/B tests, and visualize the results for the executive team. We need someone who isn't just good with numbers, but can tell a story with data. Proficiency in industry-standard visualization software and querying massive databases is mandatory. You will work closely with the sales team to optimize lead generation tracking.
+
+Required Skills (Comma-separated for your UI):
+Tableau, A/B Testing, SQL, Google BigQuery, Google Analytics, Python, Salesforce, Communication 
