@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+pydantic
+python-dotenv
+google-generativeai
+PyPDF2
+python-docx
+Pillow
+scikit-learn==1.5.2
+pandas
+spacy
+sentence-transformers
+transformers

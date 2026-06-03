@@ -1,3 +1,4 @@
+import textwrap
 # you need to install all these in your terminal
 # pip install streamlit
 # pip install scikit-learn
@@ -6,569 +7,645 @@
 
 
 import streamlit as st
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import simpleSplit
+from io import BytesIO
+
+# Load environment variables
+load_dotenv()
+
+# Configure Gemini once at startup with the API key from .env
+_gemini_api_key = os.getenv("GEMINI_API_KEY")
+if _gemini_api_key and _gemini_api_key != "your_gemini_api_key_here":
+    genai.configure(api_key=_gemini_api_key)
+
 import pickle
 import docx  # Extract text from Word file
 import PyPDF2  # Extract text from PDF
 import re
+from html import escape
+import textwrap
+# you need to install all these in your terminal
+# pip install streamlit
+# pip install scikit-learn
+# pip install python-docx
+# pip install PyPDF2
+
+
+import streamlit as st
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import simpleSplit
+from io import BytesIO
+
+# Load environment variables
+load_dotenv()
+
+# Configure Gemini once at startup with the API key from .env
+_gemini_api_key = os.getenv("GEMINI_API_KEY")
+if _gemini_api_key and _gemini_api_key != "your_gemini_api_key_here":
+    genai.configure(api_key=_gemini_api_key)
+
+import pickle
+import docx  # Extract text from Word file
+import PyPDF2  # Extract text from PDF
+import re
+from html import escape
 from pathlib import Path
+from PIL import Image
 from sentence_transformers import SentenceTransformer, util
 import spacy
 import pandas as pd
 from transformers import pipeline
+import urllib.parse
+import markdown
 
-BASE_DIR = Path(__file__).resolve().parent
-MODELS_DIR = BASE_DIR / 'models'
-
-# Load pre-trained model artifacts.
-with open(MODELS_DIR / 'clf.pkl', 'rb') as clf_file:
-    svc_model = pickle.load(clf_file)
-with open(MODELS_DIR / 'tfidf.pkl', 'rb') as tfidf_file:
-    tfidf = pickle.load(tfidf_file)
-with open(MODELS_DIR / 'encoder.pkl', 'rb') as encoder_file:
-    le = pickle.load(encoder_file)
-
-# Hardcoded list of common tech/business skills for skill gap analysis
-COMMON_SKILLS = [
-    # Programming Languages
-    'Python', 'Java', 'JavaScript', 'C++', 'C#', 'Ruby', 'PHP', 'Swift', 'Kotlin', 'Go', 'Rust',
-    'TypeScript', 'R', 'MATLAB', 'Scala', 'Perl', 'Shell', 'Bash',
+def markdown_to_styled_html(text):
+    # Remove code fences if any
+    text = text.replace('```html', '').replace('```', '')
     
-    # Web Technologies
-    'HTML', 'CSS', 'React', 'Angular', 'Vue.js', 'Node.js', 'Django', 'Flask', 'Spring',
-    'Express.js', 'jQuery', 'Bootstrap', 'REST API', 'GraphQL', 'WebSocket',
-    
-    # Databases
-    'SQL', 'MySQL', 'PostgreSQL', 'MongoDB', 'Oracle', 'SQL Server', 'Redis', 'Cassandra',
-    'DynamoDB', 'ElasticSearch', 'Neo4j', 'SQLite',
-    
-    # Cloud & DevOps
-    'AWS', 'Azure', 'Google Cloud', 'GCP', 'Docker', 'Kubernetes', 'Jenkins', 'CI/CD',
-    'Terraform', 'Ansible', 'GitLab', 'CircleCI', 'Travis CI',
-    
-    # Data Science & ML
-    'Machine Learning', 'Deep Learning', 'NLP', 'Computer Vision', 'TensorFlow', 'PyTorch',
-    'Scikit-learn', 'Keras', 'Pandas', 'NumPy', 'Matplotlib', 'Seaborn', 'Jupyter',
-    'Data Analysis', 'Statistics', 'A/B Testing', 'Neural Networks', 'CNN', 'RNN', 'LSTM',
-    
-    # Big Data
-    'Hadoop', 'Spark', 'Kafka', 'Hive', 'Pig', 'ETL', 'Data Pipeline', 'Data Warehouse',
-    'Airflow', 'Flink',
-    
-    # Version Control & Collaboration
-    'Git', 'GitHub', 'GitLab', 'Bitbucket', 'SVN', 'Mercurial',
-    
-    # Business & Soft Skills
-    'Agile', 'Scrum', 'Kanban', 'JIRA', 'Project Management', 'Leadership', 'Communication',
-    'Teamwork', 'Problem Solving', 'Critical Thinking', 'Time Management', 'Presentation',
-    
-    # Business Tools
-    'Excel', 'PowerPoint', 'Tableau', 'Power BI', 'Salesforce', 'SAP', 'Slack', 'Confluence',
-    
-    # Security
-    'Cybersecurity', 'Encryption', 'OAuth', 'JWT', 'SSL', 'Firewall', 'Penetration Testing',
-    
-    # Mobile Development
-    'iOS', 'Android', 'React Native', 'Flutter', 'Xamarin',
-    
-    # Testing
-    'Unit Testing', 'Integration Testing', 'Test Automation', 'Selenium', 'Jest', 'PyTest',
-    'JUnit', 'TestNG',
-    
-    # Other Technologies
-    'Microservices', 'API Development', 'Blockchain', 'IoT', 'AR/VR', 'Linux', 'Unix',
-    'Windows Server', 'Networking', 'TCP/IP'
-]
-
-
-# Function to clean resume text
-def cleanResume(txt):
-    cleanText = re.sub(r'http\S+\s', ' ', txt)
-    cleanText = re.sub(r'RT|cc', ' ', cleanText)
-    cleanText = re.sub(r'#\S+\s', ' ', cleanText)
-    cleanText = re.sub(r'@\S+', '  ', cleanText)
-    cleanText = re.sub('[%s]' % re.escape(r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""), ' ', cleanText)
-    cleanText = re.sub(r'[^\x00-\x7f]', ' ', cleanText)
-    cleanText = re.sub(r'\s+', ' ', cleanText)
-    return cleanText
-
-
-# Function to extract text from PDF
-def extract_text_from_pdf(file):
-    pdf_reader = PyPDF2.PdfReader(file)
-    text = ''
-    for page in pdf_reader.pages:
-        text += page.extract_text()
-    return text
-
-
-# Function to extract text from DOCX
-def extract_text_from_docx(file):
-    doc = docx.Document(file)
-    text = ''
-    for paragraph in doc.paragraphs:
-        text += paragraph.text + '\n'
-    return text
-
-
-# Function to extract text from TXT with explicit encoding handling
-def extract_text_from_txt(file):
-    # Try using utf-8 encoding for reading the text file
-    try:
-        text = file.read().decode('utf-8')
-    except UnicodeDecodeError:
-        # In case utf-8 fails, try 'latin-1' encoding as a fallback
-        text = file.read().decode('latin-1')
-    return text
-
-
-# Function to handle file upload and extraction
-def handle_file_upload(uploaded_file):
-    file_extension = uploaded_file.name.split('.')[-1].lower()
-    if file_extension == 'pdf':
-        text = extract_text_from_pdf(uploaded_file)
-    elif file_extension == 'docx':
-        text = extract_text_from_docx(uploaded_file)
-    elif file_extension == 'txt':
-        text = extract_text_from_txt(uploaded_file)
-    else:
-        raise ValueError("Unsupported file type. Please upload a PDF, DOCX, or TXT file.")
-    return text
-
-
-# Function to predict the category of a resume
-def pred(input_resume):
-    # Preprocess the input text (e.g., cleaning, etc.)
-    cleaned_text = cleanResume(input_resume)
-
-    # Vectorize the cleaned text using the same TF-IDF vectorizer used during training
-    vectorized_text = tfidf.transform([cleaned_text])
-
-    # Convert sparse matrix to dense
-    vectorized_text = vectorized_text.toarray()
-
-    # Prediction
-    predicted_category = svc_model.predict(vectorized_text)
-
-    # get name of predicted category
-    predicted_category_name = le.inverse_transform(predicted_category)
-
-    return predicted_category_name[0]  # Return the category name
-
-
-@st.cache_resource
-def load_embedding_model():
-    return SentenceTransformer('all-MiniLM-L6-v2')
-
-
-@st.cache_resource
-def load_spacy_model():
-    """Load spacy model for information extraction."""
-    try:
-        return spacy.load('en_core_web_sm')
-    except OSError:
-        st.error("spaCy model 'en_core_web_sm' not found. Please install it using: python -m spacy download en_core_web_sm")
-        return None
-
-
-def extract_candidate_info(raw_text):
-    """
-    Extract candidate information from raw resume text.
-    
-    Args:
-        raw_text: Raw resume text before cleaning
-        
-    Returns:
-        dict with keys: 'name', 'email', 'phone'
-    """
-    info = {'name': None, 'email': None, 'phone': None}
-    
-    # Extract email using regex
-    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-    email_matches = re.findall(email_pattern, raw_text)
-    if email_matches:
-        info['email'] = email_matches[0]  # Take the first email found
-    
-    # Extract phone number using regex (supports formats like (555) 123-4567 and (555) 987 -6543)
-    phone_pattern = r'\(?\d{3}\)?[-.\s]*\d{3}[-.\s]*\d{4}'
-    phone_matches = re.findall(phone_pattern, raw_text)
-    # Filter to get likely phone numbers (at least 10 digits)
-    for match in phone_matches:
-        digits_only = re.sub(r'\D', '', match)
-        if len(digits_only) >= 10:
-            info['phone'] = match.strip()
-            break
-    
-    # Extract name using spaCy PERSON entity from the beginning
-    nlp = load_spacy_model()
-    if nlp:
-        # Process first 500 characters to focus on header/contact section
-        doc = nlp(raw_text[:500])
-        for ent in doc.ents:
-            if ent.label_ == 'PERSON':
-                info['name'] = ent.text
-                break  # Take the first PERSON entity
-    
-    return info
-
-
-def calculate_match_score(cleaned_resume_text, jd_text):
-    embedding_model = load_embedding_model()
-    resume_embedding = embedding_model.encode(cleaned_resume_text, convert_to_tensor=True)
-    jd_embedding = embedding_model.encode(jd_text, convert_to_tensor=True)
-
-    similarity = float(util.cos_sim(resume_embedding, jd_embedding)[0][0])
-    similarity = max(0.0, min(1.0, similarity))
-    return similarity
-
-
-def generate_candidate_summary(text):
-    """
-    Generate an AI summary of a candidate resume using a fast summarization model.
-
-    Args:
-        text: Cleaned resume text
-
-    Returns:
-        string summary
-    """
-    summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
-    tokenizer = summarizer.tokenizer
-
-    tokens = tokenizer(text, truncation=True, max_length=1024, return_tensors="pt")
-    truncated_text = tokenizer.decode(tokens["input_ids"][0], skip_special_tokens=True)
-
-    summary = summarizer(truncated_text, max_length=150, min_length=30, do_sample=False)
-    return summary[0]["summary_text"]
-
-
-def scale_match_score(raw_score):
-    """
-    Scale raw cosine similarity (0-1) to user-friendly 0-100% using Min-Max normalization.
-    
-    raw_score: float between 0 and 1
-    Returns: scaled percentage (0-100)
-    """
-    min_realistic_score = 0.20
-    max_realistic_score = 0.60
-    
-    if raw_score >= max_realistic_score:
-        return 100.0
-    elif raw_score <= min_realistic_score:
-        return 0.0
-    else:
-        scaled = (raw_score - min_realistic_score) / (max_realistic_score - min_realistic_score)
-        return scaled * 100.0
-
-
-def get_match_category(scaled_percentage):
-    """
-    Categorize match score into 4 tiers.
-    
-    scaled_percentage: float between 0 and 100
-    Returns: tuple (category_name, color_function)
-    """
-    if scaled_percentage >= 80:
-        return "Excellent Match", "success"
-    elif scaled_percentage >= 50:
-        return "Moderate Match", "warning"
-    elif scaled_percentage >= 20:
-        return "Poor Match", "error"
-    else:
-        return "No Match", "error"
-
-
-def extract_skills_from_text(text):
-    """
-    Extract skills from text by matching against the common skills list.
-    
-    Args:
-        text: Text to search for skills (should be lowercase)
-        
-    Returns:
-        set of found skills
-    """
-    text_lower = text.lower()
-    found_skills = set()
-    
-    for skill in COMMON_SKILLS:
-        # Use word boundaries to avoid partial matches
-        # e.g., "Java" should not match "JavaScript"
-        skill_lower = skill.lower()
-        
-        # Create a regex pattern with word boundaries
-        # Handle skills with spaces or special characters
-        pattern = r'\b' + re.escape(skill_lower) + r'\b'
-        
-        if re.search(pattern, text_lower):
-            found_skills.add(skill)
-    
-    return found_skills
-
-
-def analyze_skill_gap(resume_text, jd_text):
-    """
-    Compare skills in resume vs job description to find matches and gaps.
-    
-    Args:
-        resume_text: Cleaned resume text
-        jd_text: Cleaned job description text
-        
-    Returns:
-        dict with keys: 'matched_skills', 'missing_skills', 'resume_skills', 'jd_skills'
-    """
-    resume_skills = extract_skills_from_text(resume_text)
-    jd_skills = extract_skills_from_text(jd_text)
-    
-    matched_skills = resume_skills.intersection(jd_skills)
-    missing_skills = jd_skills - resume_skills
-    
-    return {
-        'matched_skills': sorted(matched_skills),
-        'missing_skills': sorted(missing_skills),
-        'resume_skills': sorted(resume_skills),
-        'jd_skills': sorted(jd_skills)
-    }
-
-
-def analyze_custom_skill_gap(raw_resume_text, custom_skills_input):
-    """
-    Analyze custom skills from comma-separated text input against raw resume text.
-
-    Args:
-        raw_resume_text: Raw resume text
-        custom_skills_input: Comma-separated custom skills from st.text_input
-
-    Returns:
-        dict with keys: 'matched_skills', 'missing_skills', 'resume_skills', 'jd_skills'
-    """
-    resume_text_lower = raw_resume_text.lower()
-    custom_skills = [skill.strip().lower() for skill in custom_skills_input.split(',') if skill.strip()]
-
-    matched_skills = set()
-    for skill in custom_skills:
-        pattern = r'\b' + re.escape(skill) + r'\b'
-        if re.search(pattern, resume_text_lower):
-            matched_skills.add(skill)
-
-    required_skills = set(custom_skills)
-    missing_skills = required_skills - matched_skills
-
-    return {
-        'matched_skills': sorted(matched_skills),
-        'missing_skills': sorted(missing_skills),
-        'resume_skills': sorted(matched_skills),
-        'jd_skills': sorted(required_skills)
-    }
-
-
-def analyze_career_progression(raw_text):
-    """
-    Analyze objective role progression from resume text.
-
-    Args:
-        raw_text: Raw resume text
-
-    Returns:
-        tuple: (total_promotions, progression_path)
-    """
-    # Seniority score map for objective progression checks
-    level_scores = {
-        'intern': 1,
-        'trainee': 1,
-        'entry': 2,
-        'assistant': 2,
-        'associate': 2,
-        'junior': 2,
-        'analyst': 3,
-        'engineer': 3,
-        'developer': 3,
-        'consultant': 3,
-        'specialist': 3,
-        'coordinator': 3,
-        'senior': 4,
-        'lead': 5,
-        'manager': 6,
-        'head': 7,
-        'director': 7,
-        'vice president': 8,
-        'vp': 8,
-        'chief': 9,
-        'cto': 9,
-        'ceo': 9,
-        'cfo': 9,
-        'coo': 9
-    }
-
-    title_keywords_pattern = re.compile(
-        r'\b(intern|trainee|entry|assistant|associate|junior|analyst|engineer|developer|consultant|specialist|'
-        r'coordinator|senior|lead|manager|head|director|vice president|vp|chief|cto|ceo|cfo|coo)\b',
-        re.IGNORECASE
+    # Convert markdown to HTML using the markdown library
+    html = markdown.markdown(
+        text,
+        extensions=['tables', 'fenced_code', 'nl2br']
     )
-
-    org_suffix_pattern = re.compile(
-        r'\b([A-Z][A-Za-z0-9&.,\- ]{2,}?(?:Inc|LLC|Ltd|Limited|Corp|Corporation|Company|Technologies|Systems|Solutions|Group))\b'
+    
+    # Style the tables
+    html = html.replace(
+        '<table>',
+        '<table style="width:100%;border-collapse:collapse;margin:16px 0;">'
     )
+    html = html.replace(
+        '<th>',
+        '<th style="border:1px solid #334155;padding:12px;background:#1e293b;color:#a78bfa;text-align:left;">'
+    )
+    html = html.replace(
+        '<td>',
+        '<td style="border:1px solid #334155;padding:10px;color:#e2e8f0;">'
+    )
+    
+    # Style headings
+    html = re.sub(
+        r'<h1>(.*?)</h1>',
+        r'<h1 style="color:#a78bfa;border-bottom:2px solid #7c3aed;padding-bottom:10px;margin-top:24px;">\1</h1>',
+        html
+    )
+    html = re.sub(
+        r'<h2>(.*?)</h2>',
+        r'<h2 style="color:#a78bfa;border-bottom:1px solid #7c3aed;padding-bottom:8px;margin-top:20px;">\1</h2>',
+        html
+    )
+    html = re.sub(
+        r'<h3>(.*?)</h3>',
+        r'<h3 style="color:#818cf8;margin-top:16px;">\1</h3>',
+        html
+    )
+    html = re.sub(
+        r'<h4>(.*?)</h4>',
+        r'<h4 style="color:#c4b5fd;margin-top:12px;">\1</h4>',
+        html
+    )
+    
+    # Style lists
+    html = html.replace(
+        '<ul>',
+        '<ul style="padding-left:20px;line-height:2;">'
+    )
+    html = html.replace(
+        '<li>',
+        '<li style="margin-bottom:6px;color:#cbd5e1;">'
+    )
+    
+    # Style paragraphs
+    html = html.replace(
+        '<p>',
+        '<p style="color:#cbd5e1;line-height:1.8;margin:10px 0;">'
+    )
+    
+    # Style hr
+    html = html.replace(
+        '<hr />',
+        '<hr style="border:none;border-top:1px solid #334155;margin:24px 0;">'
+    )
+    html = html.replace(
+        '<hr>',
+        '<hr style="border:none;border-top:1px solid #334155;margin:24px 0;">'
+    )
+    
+    # Color gap level keywords
+    html = html.replace(
+        'Critical',
+        '<span style="color:#f87171;font-weight:bold;">Critical</span>'
+    )
+    html = html.replace(
+        'High',
+        '<span style="color:#fb923c;font-weight:bold;">High</span>'
+    )
+    html = html.replace(
+        'Medium',
+        '<span style="color:#facc15;font-weight:bold;">Medium</span>'
+    )
+    html = html.replace(
+        'Low',
+        '<span style="color:#4ade80;font-weight:bold;">Low</span>'
+    )
+    
+    return html
 
-    def clean_title_line(line):
-        title = re.sub(r'\s+', ' ', line).strip(' -|:•\t')
-        title = re.sub(r'\b(\d{4}\s*[-–]\s*\d{4}|\d{4}\s*[-–]\s*(Present|Current))\b', '', title, flags=re.IGNORECASE)
-        title = re.sub(r'\s+', ' ', title).strip(' -|:•\t')
-        words = title.split()
-        if len(words) > 12:
-            title = ' '.join(words[:12])
-        return title
-
-    def extract_company_from_line(line, nlp_model=None):
-        at_match = re.search(r'\b(?:at|@)\s+([A-Z][A-Za-z0-9&.,\- ]{1,60})', line)
-        if at_match:
-            return at_match.group(1).strip(' -|:;,.')
-
-        pipe_parts = re.split(r'\s[\-|\|]\s', line)
-        if len(pipe_parts) > 1:
-            for part in pipe_parts:
-                if not title_keywords_pattern.search(part):
-                    candidate = part.strip(' -|:;,.')
-                    if candidate and len(candidate.split()) <= 8:
-                        return candidate
-
-        org_match = org_suffix_pattern.search(line)
-        if org_match:
-            return org_match.group(1).strip(' -|:;,.')
-
-        if nlp_model:
-            doc = nlp_model(line)
-            for ent in doc.ents:
-                if ent.label_ == 'ORG':
-                    return ent.text.strip(' -|:;,.')
-
-        return "Unknown Company"
-
-    def get_level_score(title):
-        title_lower = title.lower()
-        found_scores = [score for keyword, score in level_scores.items() if re.search(rf'\b{re.escape(keyword)}\b', title_lower)]
-        if not found_scores:
-            return 0
-        return max(found_scores)
-
-    nlp = load_spacy_model()
-    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-
-    # Fallback if text was extracted as one long block
-    if len(lines) <= 1:
-        lines = [seg.strip() for seg in re.split(r'(?<=[.!?])\s+|\s{2,}', raw_text) if seg.strip()]
-
-    extracted_roles = []
-    seen_titles = set()
-
-    for line in lines:
-        if not title_keywords_pattern.search(line):
-            continue
-
-        cleaned_title = clean_title_line(line)
-        if not cleaned_title or len(cleaned_title) < 3:
-            continue
-
-        normalized_title = cleaned_title.lower()
-        if normalized_title in seen_titles:
-            continue
-
-        level_score = get_level_score(cleaned_title)
-        if level_score == 0:
-            continue
-
-        company = extract_company_from_line(line, nlp_model=nlp)
-        extracted_roles.append({
-            'title': cleaned_title,
-            'company': company,
-            'level': level_score
-        })
-        seen_titles.add(normalized_title)
-
-    if len(extracted_roles) < 2:
-        return 0, []
-
-    def compute_progressions(sequence):
-        promotions = 0
-        path = []
-        for i in range(1, len(sequence)):
-            prev_role = sequence[i - 1]
-            current_role = sequence[i]
-            if current_role['level'] > prev_role['level']:
-                promotions += 1
-                path.append(f"From {prev_role['title']} ➔ To {current_role['title']}")
-        return promotions, path
-
-    # Resumes are commonly reverse-chronological; evaluate both directions.
-    forward_promotions, forward_path = compute_progressions(extracted_roles)
-    reverse_roles = list(reversed(extracted_roles))
-    reverse_promotions, reverse_path = compute_progressions(reverse_roles)
-
-    if reverse_promotions > forward_promotions:
-        return reverse_promotions, reverse_path
-
-    return forward_promotions, forward_path
-
-
-def extract_career_timeline(raw_text):
+def sanitize_html_response(text):
     """
-    Extract chronological career timeline entries from resume text using date-range regex patterns.
-
-    Args:
-        raw_text: Raw resume text
-
-    Returns:
-        list[dict]: [{'date': '<date range>', 'context': '<job/company context>'}, ...]
+    Strip stray markdown artifacts that Gemini sometimes emits even when asked for pure HTML.
+    The prompt already instructs Gemini to return fully-styled HTML, so we only need to
+    clean up the wrapper noise — we do NOT re-process the content.
     """
-    date_range_patterns = [
-        # Jan 2020 - Dec 2022 / January 2020 to Present
-        r'\b(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)\s+\d{4}\s*(?:-|–|to)\s*(?:(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)\s+\d{4}|Present|Current)\b',
-        # 05/2019 - 08/2021 or 5/2019 to Present
-        r'\b(?:0?[1-9]|1[0-2])\/\d{4}\s*(?:-|–|to)\s*(?:(?:0?[1-9]|1[0-2])\/\d{4}|Present|Current)\b',
-        # 2015-2018 or 2018 to Present
-        r'\b\d{4}\s*(?:-|–|to)\s*(?:\d{4}|Present|Current)\b'
-    ]
+    # Remove code fences (```html ... ``` or ``` ... ```)
+    text = re.sub(r'```html?\s*', '', text)
+    text = re.sub(r'```\s*', '', text)
 
-    combined_pattern = re.compile('|'.join(date_range_patterns), re.IGNORECASE)
-    lines = [line.strip() for line in raw_text.splitlines()]
+    # Remove any bare markdown headings (## Heading) that slipped through
+    text = re.sub(r'(?m)^#{1,6}\s+', '', text)
 
-    timeline = []
-    seen = set()
+    # Remove bare **bold** markers that are outside HTML tags
+    text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
 
-    for i, line in enumerate(lines):
-        if not line:
-            continue
+    # Remove bare *italic* markers
+    text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', text)
 
-        matches = combined_pattern.findall(line)
-        if not matches:
-            continue
+    # Remove bare markdown horizontal rules (--- or ***)
+    text = re.sub(r'(?m)^[-*]{3,}\s*$', '', text)
 
-        for match in matches:
-            date_text = match.strip()
+    return text.strip()
 
-            # Use same line by default; if it's mostly date-only, use previous line as context when available.
-            context = line
-            line_without_date = re.sub(re.escape(date_text), '', line, flags=re.IGNORECASE).strip(' -|:•\t')
-            if (not line_without_date or len(line_without_date) < 4) and i > 0:
-                previous_line = lines[i - 1].strip()
-                if previous_line:
-                    context = f"{previous_line} | {line}"
+def _format_inline_markdown(text):
+    """Escape unsafe text, then restore simple bold/italic emphasis."""
+    text = escape(text)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    text = re.sub(r'(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)', r'<em>\1</em>', text)
+    text = re.sub(r'\b(Critical|High|Medium|Low)\b', lambda match: f'<span class="gap-badge gap-{match.group(1).lower()}">{match.group(1)}</span>', text)
+    return text
 
-            normalized_key = (date_text.lower(), context.lower())
-            if normalized_key in seen:
-                continue
+def _split_markdown_table_row(line):
+    line = line.strip().strip('|')
+    return [cell.strip() for cell in line.split('|')]
 
-            timeline.append({
-                'date': date_text,
-                'context': context
-            })
-            seen.add(normalized_key)
+def _is_markdown_table_separator(line):
+    cells = _split_markdown_table_row(line)
+    return bool(cells) and all(re.fullmatch(r':?-{3,}:?', cell) for cell in cells)
 
-    return timeline
+def _parse_markdown_table(lines, start_index):
+    headers = _split_markdown_table_row(lines[start_index])
+    rows = []
+    index = start_index + 2
+
+    while index < len(lines) and '|' in lines[index] and lines[index].strip():
+        rows.append(_split_markdown_table_row(lines[index]))
+        index += 1
+
+    table_html = ['<div class="career-table-wrap"><table class="career-table"><thead><tr>']
+    for header in headers:
+        table_html.append(f'<th>{_format_inline_markdown(header)}</th>')
+    table_html.append('</tr></thead><tbody>')
+
+    for row in rows:
+        table_html.append('<tr>')
+        for cell in row[:len(headers)]:
+            table_html.append(f'<td>{_format_inline_markdown(cell)}</td>')
+        for _ in range(len(headers) - len(row)):
+            table_html.append('<td></td>')
+        table_html.append('</tr>')
+
+    table_html.append('</tbody></table></div>')
+    return ''.join(table_html), index
+
+def format_career_coaching_response(text):
+    """
+    Convert Gemini's common Markdown output into clean HTML for the Career Enhancer.
+    Handles headings, bullets, numbered lists, horizontal rules, and pipe tables.
+    """
+    text = text or ""
+    text = re.sub(r'```html?\s*', '', text)
+    text = re.sub(r'```\s*', '', text)
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+
+    if re.search(r'<(div|h[1-6]|table|ul|ol|p|li)\b', text, re.IGNORECASE):
+        return sanitize_html_response(text)
+                                
+                            except Exception as e:
+                                st.error(f"An error occurred: {str(e)}")
+                                
+        elif selected_feature == "🔍 Live Job & Internship Search":
+            st.markdown("### 🔍 Live Job & Internship Search (Real-Time)")
+            st.markdown("Enter your skills and preferences. Our AI will determine the exact 5 job titles you are best suited for, and automatically generate real-time search links filtered for the **latest** job postings.")
+            
+            with st.form("job_search_form"):
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    user_skills = st.text_area("Your Core Skills or Resume Summary", height=100)
+                with col2:
+                    location = st.text_input("Preferred Location (e.g., Remote, New York, London)", value="Remote")
+                    job_type = st.radio("Looking For:", ["Internship", "Full-Time Job"])
+                
+                submit_search = st.form_submit_button("Find Latest Openings")
+                
+            if submit_search:
+                if not user_skills:
+                    st.error("Please enter your skills to get accurate job titles.")
+                else:
+                    api_key = os.getenv("GEMINI_API_KEY")
+                    if not api_key or api_key == "your_gemini_api_key_here":
+                        st.error("Gemini API key is not configured. Please add your real key to the .env file.")
+                    else:
+                        with st.spinner("Analyzing your profile to find the best job titles..."):
+                            try:
+                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                
+                                prompt = f'''
+Based on the candidate's skills below, predict the top 5 exact job titles they are best suited for.
+Return ONLY a comma-separated list of the 5 job titles. Do NOT include numbers, bullet points, or extra text.
+
+Candidate Skills: {user_skills}
+Target Type: {job_type}
+'''
+                                response = model.generate_content(prompt)
+                                titles_raw = response.text
+                                
+                                # Parse the comma separated titles
+                                titles = [t.strip() for t in titles_raw.split(',') if t.strip()]
+                                # Fallback if Gemini formats weirdly
+                                if len(titles) < 2:
+                                    titles = [t.strip('- ').strip() for t in titles_raw.split('\\n') if t.strip()]
+                                
+                                # Take top 5
+                                titles = titles[:5]
+                                
+                                st.success(f"Successfully identified your top {len(titles)} matching roles!")
+                                st.markdown("### ⚡ Live Job Board Links (Filtered for Latest)")
+                                
+                                # Generate URLs for each title
+                                for title in titles:
+                                    st.markdown(f"#### 🎯 {title}")
+                                    
+                                    enc_title = urllib.parse.quote(title)
+                                    enc_loc = urllib.parse.quote(location)
+                                    
+                                    # LinkedIn configuration
+                                    # f_TPR=r86400 (Past 24 hours), f_E=1 (Internship) or f_E=2,3,4,5,6 (Full time)
+                                    li_level = "1" if job_type == "Internship" else "2%2C3%2C4"
+                                    linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={enc_title}&location={enc_loc}&f_TPR=r86400&f_E={li_level}"
+                                    
+                                    # Google Jobs URL (q=title+jobs+in+location)
+                                    google_q = urllib.parse.quote(f"{title} {job_type.lower()}s in {location}")
+                                    google_url = f"https://www.google.com/search?q={google_q}&ibp=htl;jobs#fpstate=tldetail&htivrt=jobs&htichips=date_posted:today"
+                                    
+                                    # Indeed URL (sort=date)
+                                    indeed_url = f"https://www.indeed.com/jobs?q={enc_title}&l={enc_loc}&sort=date"
+                                    
+                                    st.markdown(f"""
+                                    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                                        <a href="{linkedin_url}" target="_blank" style="text-decoration: none;">
+                                            <button style="background: #0077b5; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+                                                Find on LinkedIn
+                                            </button>
+                                        </a>
+                                        <a href="{google_url}" target="_blank" style="text-decoration: none;">
+                                            <button style="background: #DB4437; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+                                                Find on Google Jobs
+                                            </button>
+                                        </a>
+                                        <a href="{indeed_url}" target="_blank" style="text-decoration: none;">
+                                            <button style="background: #2164f4; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+                                                Find on Indeed
+                                            </button>
+                                        </a>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    st.divider()
+                                    
+                            except Exception as e:
+                                st.error(f"An error occurred: {str(e)}")
+                                
+
+        elif selected_feature == "✉️ AI Cover Letter Generator":
+            st.markdown("### ✉️ AI Cover Letter Generator")
+            st.markdown("Instantly generate a highly personalized cover letter based on your resume and the target job description.")
+            st.markdown("**1. Upload or Paste your Resume**")
+            uploaded_cl_resume = st.file_uploader("Upload Resume (PDF, DOCX, TXT, Image)", type=["pdf", "docx", "txt", "png", "jpg", "jpeg"], key="cl_resume")
+            
+            with st.form("cl_form"):
+                name = st.text_input("Your Name")
+                resume_text = st.text_area("Or Paste Your Resume Summary / Full Text", height=150)
+                jd_text = st.text_area("Target Job Description", height=150)
+                submit_cl = st.form_submit_button("Generate Cover Letter")
+                
+            if submit_cl:
+                final_resume_text = resume_text
+                if uploaded_cl_resume:
+                    try:
+                        final_resume_text = handle_file_upload(uploaded_cl_resume) + "\n\n" + resume_text
+                    except Exception as e:
+                        st.error(f"Error parsing resume file: {str(e)}")
+                        
+                if not name or not final_resume_text.strip() or not jd_text:
+                    st.error("Please fill in all fields (Provide a resume by uploading or pasting).")
+                else:
+                    api_key = os.getenv("GEMINI_API_KEY")
+                    if not api_key or api_key == "your_gemini_api_key_here":
+                        st.error("Gemini API key is not configured.")
+                    else:
+                        with st.spinner("Drafting a compelling cover letter..."):
+                            try:
+                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                prompt = f"Write a professional, compelling cover letter for {name} based on this resume:\n{final_resume_text}\n\nTarget Job Description:\n{jd_text}\n\nDo not include placeholders, make it sound confident and highlight matching skills."
+                                response = model.generate_content(prompt)
+                                st.success("Cover Letter Generated!")
+                                st.markdown("""<div style="background-color: rgba(30, 41, 59, 0.6); padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); margin-top: 20px;">""", unsafe_allow_html=True)
+                                st.markdown(response.text)
+                                st.markdown("</div>", unsafe_allow_html=True)
+                            except Exception as e:
+                                st.error(str(e))
+                                
+        elif selected_feature == "⚡ ATS Resume Score Booster":
+            st.markdown("### ⚡ ATS Resume Score Booster")
+            st.markdown("Get specific, line-by-line wording suggestions to optimize your resume for ATS tracking.")
+            st.markdown("**1. Upload or Paste your Resume**")
+            uploaded_ats_resume = st.file_uploader("Upload Resume (PDF, DOCX, TXT, Image)", type=["pdf", "docx", "txt", "png", "jpg", "jpeg"], key="ats_resume")
+            
+            with st.form("ats_form"):
+                resume_text = st.text_area("Or Paste your Current Resume text", height=200)
+                jd_text = st.text_area("Paste the Target Job Description", height=150)
+                submit_ats = st.form_submit_button("Analyze & Boost Score")
+                
+            if submit_ats:
+                final_resume_text = resume_text
+                if uploaded_ats_resume:
+                    try:
+                        final_resume_text = handle_file_upload(uploaded_ats_resume) + "\n\n" + resume_text
+                    except Exception as e:
+                        st.error(f"Error parsing resume file: {str(e)}")
+                        
+                if not final_resume_text.strip() or not jd_text:
+                    st.error("Please provide both Resume (upload or paste) and Job Description.")
+                else:
+                    api_key = os.getenv("GEMINI_API_KEY")
+                    if not api_key or api_key == "your_gemini_api_key_here":
+                        st.error("Gemini API key is not configured.")
+                    else:
+                        with st.spinner("Analyzing keywords and formatting..."):
+                            try:
+                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                prompt = f"Act as an ATS Optimization Expert. Analyze this resume against the JD.\nResume:\n{final_resume_text}\n\nJD:\n{jd_text}\n\n1. Provide an estimated ATS match score.\n2. Identify exactly which keywords are missing.\n3. Suggest 3 specific wording changes (e.g. Replace 'Did X' with 'Engineered X resulting in Y')."
+                                response = model.generate_content(prompt)
+                                st.success("Optimization Report Ready!")
+                                st.markdown("""<div style="background-color: rgba(30, 41, 59, 0.6); padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); margin-top: 20px;">""", unsafe_allow_html=True)
+                                st.markdown(response.text)
+                                st.markdown("</div>", unsafe_allow_html=True)
+                            except Exception as e:
+                                st.error(str(e))
+
+        elif selected_feature == "🎤 AI Mock Interview Prep":
+            st.markdown("### 🎤 AI Mock Interview Prep")
+            st.markdown("Generate highly specific interview questions based on the intersection of your resume and the target job.")
+            st.markdown("**1. Upload or Paste your Resume**")
+            uploaded_interview_resume = st.file_uploader("Upload Resume (PDF, DOCX, TXT, Image)", type=["pdf", "docx", "txt", "png", "jpg", "jpeg"], key="int_resume")
+            
+            with st.form("interview_form"):
+                resume_text = st.text_area("Or Paste Your Resume Summary", height=150)
+                jd_text = st.text_area("Target Job Description", height=150)
+                submit_interview = st.form_submit_button("Generate Interview Questions")
+                
+            if submit_interview:
+                final_resume_text = resume_text
+                if uploaded_interview_resume:
+                    try:
+                        final_resume_text = handle_file_upload(uploaded_interview_resume) + "\n\n" + resume_text
+                    except Exception as e:
+                        st.error(f"Error parsing resume file: {str(e)}")
+                        
+                if not final_resume_text.strip() or not jd_text:
+                    st.error("Please provide both Resume (upload or paste) and Job Description.")
+                else:
+                    api_key = os.getenv("GEMINI_API_KEY")
+                    if not api_key or api_key == "your_gemini_api_key_here":
+                        st.error("Gemini API key is not configured.")
+                    else:
+                        with st.spinner("Preparing your custom interview panel..."):
+                            try:
+                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                prompt = f"Act as a Senior Hiring Manager. Based on the candidate's resume and the JD, generate 5 highly specific interview questions (3 technical/role-specific, 2 behavioral).\nResume:\n{final_resume_text}\n\nJD:\n{jd_text}\n\nProvide the questions, and briefly explain what a 'good answer' should include for each."
+                                response = model.generate_content(prompt)
+                                st.success("Questions Generated! Time to practice.")
+                                st.markdown("""<div style="background-color: rgba(30, 41, 59, 0.6); padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); margin-top: 20px;">""", unsafe_allow_html=True)
+                                st.markdown(response.text)
+                                st.markdown("</div>", unsafe_allow_html=True)
+                            except Exception as e:
+                                st.error(str(e))
+                                
+        elif selected_feature == "🏗️ Project Idea Generator":
+            st.markdown("### 🏗️ Project Idea Generator")
+            st.markdown("Missing a crucial skill required by a job? Let AI generate a weekend portfolio project to help you learn it fast.")
+            
+            with st.form("project_form"):
+                skill = st.text_input("Target Skill to Learn (e.g., AWS, React, Docker)")
+                level = st.selectbox("Your Current Level", ["Complete Beginner", "Some Knowledge", "Intermediate"])
+                submit_project = st.form_submit_button("Generate Project Blueprint")
+                
+            if submit_project:
+                if not skill:
+                    st.error("Please enter a skill.")
+                else:
+                    api_key = os.getenv("GEMINI_API_KEY")
+                    if not api_key or api_key == "your_gemini_api_key_here":
+                        st.error("Gemini API key is not configured.")
+                    else:
+                        with st.spinner("Architecting your project..."):
+                            try:
+                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                prompt = f"Act as a Senior Developer and Mentor. The user wants to learn {skill} to add to their resume. Their current level is {level}. Give them a step-by-step blueprint for a weekend portfolio project they can build to honestly claim this skill on their resume. Include architecture, tools needed, and steps."
+                                response = model.generate_content(prompt)
+                                st.success("Project Blueprint Generated!")
+                                st.markdown("""<div style="background-color: rgba(30, 41, 59, 0.6); padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); margin-top: 20px;">""", unsafe_allow_html=True)
+                                st.markdown(response.text)
+                                st.markdown("</div>", unsafe_allow_html=True)
+                            except Exception as e:
+                                st.error(str(e))
+
+        return
+    # --- IF HR, CONTINUE WITH EXISTING APP ---
 
 
-# Streamlit app layout
-def main():
-    st.set_page_config(page_title="Enterprise ATS Dashboard", page_icon="💼", layout="wide")
+    # ===== PREMIUM UI INJECTION =====
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: 'Outfit', sans-serif !important;
+    }
+    
+    .stApp {
+        background-color: #0B0E14 !important;
+        background-image: 
+            radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.08), transparent 25%),
+            radial-gradient(circle at 85% 30%, rgba(236, 72, 153, 0.08), transparent 25%);
+        color: #F3F4F6 !important;
+    }
+
+    h1 {
+        font-size: 2.5rem !important;
+        font-weight: 800 !important;
+        background: linear-gradient(135deg, #FFFFFF 0%, #A5B4FC 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: -0.04em !important;
+    }
+    
+    h2 { font-size: 1.8rem !important; }
+    h3 { font-size: 1.5rem !important; }
+
+    /* Sidebar sizing */
+    [data-testid="stSidebar"] {
+        background: rgba(15, 23, 42, 0.6) !important;
+        backdrop-filter: blur(24px) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+    }
+    
+    /* Enlarge Form Labels */
+    [data-testid="stWidgetLabel"] p, .stTextInput label p, .stTextArea label p, .stSelectbox label p {
+        font-size: 1.15rem !important;
+        font-weight: 600 !important;
+        margin-bottom: 5px !important;
+    }
+
+    /* Bigger Inputs */
+    .stTextArea textarea, .stTextInput input {
+        background-color: rgba(15, 23, 42, 0.6) !important;
+        border: 2px solid rgba(255, 255, 255, 0.1) !important;
+        color: #FFFFFF !important;
+        border-radius: 12px !important;
+        font-size: 1.1rem !important;
+        padding: 16px !important;
+        line-height: 1.5 !important;
+    }
+    .stTextArea textarea {
+        height: 250px !important;
+    }
+    .stTextArea textarea:focus, .stTextInput input:focus {
+        border-color: #6366F1 !important;
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.4) !important;
+    }
+
+    /* Expander size bump */
+    [data-testid="stExpander"] {
+        background: rgba(30, 41, 59, 0.4) !important;
+        backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+    }
+    [data-testid="stExpander"] summary {
+        padding: 16px !important;
+        font-size: 1.2rem !important;
+        font-weight: 700 !important;
+    }
+    [data-testid="stExpander"] summary p {
+        font-size: 1.2rem !important; 
+        font-weight: 700 !important;
+    }
+
+            /* Space before Tabs */
+    [data-testid="stTabs"] {
+        margin-top: 48px !important;
+    }
+
+    /* Tabs size bump */
+    [data-testid="stTabs"] button[role="tab"] {
+        border-radius: 99px !important;
+        padding: 16px 32px !important; /* Enlarged padding */
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        margin-right: 12px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    /* Target the text inside the tab */
+    [data-testid="stTabs"] button[role="tab"] p, [data-testid="stTabs"] button[role="tab"] div {
+        font-size: 1.5rem !important; /* Enlarged font */
+        font-weight: 700 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+        background: linear-gradient(135deg, #6366F1 0%, #EC4899 100%) !important;
+        box-shadow: 0 4px 20px rgba(236, 72, 153, 0.4) !important;
+    }
+    [data-testid="stTabs"] button[role="tab"][aria-selected="true"] p {
+        color: #FFFFFF !important;
+    }
+
+            /* Boxed Metrics */
+    [data-testid="stMetric"] {
+        background: rgba(30, 41, 59, 0.6) !important;
+        padding: 24px !important;
+        border-radius: 20px !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.15) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
+    }
+    
+    /* Metrics Sizes Adjusted based on user preference */
+    [data-testid="stMetricValue"], [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] p {
+        font-size: 1.6rem !important; /* Values slightly smaller or equal */
+        font-weight: 600 !important;
+        line-height: 1.2 !important;
+        white-space: nowrap !important;
+        overflow: visible !important;
+        color: #FFFFFF !important;
+        width: 100% !important;
+        text-align: center !important;
+        justify-content: center !important;
+    }
+    [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] > div, [data-testid="stMetricLabel"] p, [data-testid="stMetricLabel"] label {
+        font-size: 2.0rem !important; /* Labels significantly enlarged */
+        font-weight: 800 !important;
+        white-space: nowrap !important;
+        overflow: visible !important;
+        color: #A5B4FC !important;
+        width: 100% !important;
+        text-align: center !important;
+        justify-content: center !important;
+        margin-bottom: 8px !important;
+    }
+
+    /* Hide standard dataframe to enforce our html one */
+    [data-testid="stDataFrame"] {
+        border-radius: 12px !important;
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
+        border-radius: 12px !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+        padding: 12px 24px !important;
+        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 
     # ===== MAIN DASHBOARD HEADER =====
     st.title("💼 Enterprise Applicant Tracking System")
@@ -581,14 +658,21 @@ def main():
 
     # ===== SIDEBAR CONTROLS =====
     st.sidebar.title("⚙️ ATS Control Panel")
+    
+    # Add Exit Button for HR
+    if st.sidebar.button("🚪 Exit HR Session", key="exit_hr"):
+        st.session_state.role = None
+        st.rerun()
+        
+    st.sidebar.divider()
     st.sidebar.markdown("Configure your screening parameters below:")
     
     # File uploader in sidebar - ACCEPTS MULTIPLE FILES
     uploaded_files = st.sidebar.file_uploader(
         "📤 Upload Candidate Resume(s)",
-        type=["pdf", "docx", "txt"],
+        type=["pdf", "docx", "txt", "png", "jpg", "jpeg"],
         accept_multiple_files=True,
-        help="Upload one or multiple resumes in PDF, DOCX, or TXT format"
+        help="Upload one or multiple resumes in PDF, DOCX, TXT, or Image format"
     )
     
     # Job Description in expandable section
@@ -700,15 +784,48 @@ def main():
                     'Missing Skills Count'
                 ]].copy()
                 
-                # Format the display
-                display_df['Match Score'] = display_df['Match Score'].apply(lambda x: f"{x:.1f}%")
-                display_df['Skill Coverage'] = display_df['Skill Coverage'].apply(lambda x: f"{x:.1f}%")
-                
-                st.dataframe(
-                    display_df,
-                    use_container_width=True,
-                    hide_index=True
-                )
+                # Custom HTML Leaderboard (dedented)
+                html_table = textwrap.dedent("""
+                <div style='overflow-x: auto;'>
+                    <table style='width: 100%; border-collapse: separate; border-spacing: 0 12px; font-family: Outfit, sans-serif;'>
+                    <thead>
+                        <tr style='color: #94A3B8; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px;'>
+                            <th style='padding: 0 24px; text-align: left;'>Candidate</th>
+                            <th style='text-align: left;'>Category</th>
+                            <th style='text-align: center;'>Match Score</th>
+                            <th style='text-align: center;'>Skill Coverage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                """)
+                for i, row_l in df.iterrows():
+                    rank_medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "👤"
+                    score_color = "#10B981" if row_l['Match Score'] >= 80 else "#F59E0B" if row_l['Match Score'] >= 50 else "#EF4444"
+                    html_table += textwrap.dedent(f"""
+                    <tr style='background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(12px); box-shadow: 0 4px 16px rgba(0,0,0,0.15); transition: transform 0.2s ease;'>
+                        <td style='padding: 20px 24px; border-top-left-radius: 16px; border-bottom-left-radius: 16px; font-size: 1.2rem; font-weight: 700; color: #FFFFFF;'>
+                            <span style='font-size: 1.8rem; margin-right: 12px; vertical-align: middle;'>{rank_medal}</span> {row_l['Candidate Name']}
+                        </td>
+                        <td style='padding: 20px 24px; font-size: 1.1rem; color: #A5B4FC; font-weight: 500;'>{row_l['Predicted Category']}</td>
+                        <td style='padding: 20px 24px; text-align: center;'>
+                            <div style='background: {score_color}15; color: {score_color}; padding: 8px 20px; border-radius: 99px; display: inline-block; font-weight: 800; font-size: 1.3rem; border: 1px solid {score_color}40;'>
+                                {row_l['Match Score']:.1f}%
+                            </div>
+                        </td>
+                        <td style='padding: 20px 24px; border-top-right-radius: 16px; border-bottom-right-radius: 16px; text-align: center;'>
+                            <div style='font-size: 1.2rem; font-weight: 700; color: #E0E7FF; margin-bottom: 8px;'>{row_l['Skill Coverage']:.1f}%</div>
+                            <div style='width: 100%; background: rgba(255,255,255,0.05); height: 8px; border-radius: 99px; overflow: hidden;'>
+                                <div style='width: {row_l["Skill Coverage"]}%; background: linear-gradient(90deg, #6366F1, #EC4899); height: 100%; border-radius: 99px;'></div>
+                            </div>
+                        </td>
+                    </tr>
+                    """)
+                html_table += textwrap.dedent("""
+                    </tbody>
+                    </table>
+                </div>
+                """)
+                st.markdown(re.sub(r"\s+", " ", html_table).strip(), unsafe_allow_html=True)
                 
                 # Top candidate highlight
                 top_candidate = df.iloc[0]
@@ -812,10 +929,22 @@ def main():
                             )
 
                             if progression_path:
-                                progression_df = pd.DataFrame({
-                                    'Progression Path': progression_path
-                                })
-                                st.table(progression_df)
+                                prog_html = textwrap.dedent("""
+                                <div style='display: flex; flex-direction: column; gap: 20px; margin-top: 20px; font-family: Outfit, sans-serif;'>
+                                """)
+                                for i, step in enumerate(progression_path):
+                                    line_div = f"<div style='position: absolute; left: 11px; top: 24px; width: 2px; height: 100%; background: linear-gradient(to bottom, rgba(236,72,153,0.5), rgba(99,102,241,0.5)); z-index: 1;'></div>" if i < len(progression_path)-1 else ""
+                                    prog_html += textwrap.dedent(f"""
+                                    <div style='position: relative; padding-left: 48px;'>
+                                        <div style='position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; background: #EC4899; box-shadow: 0 0 16px rgba(236, 72, 153, 0.6); z-index: 2; border: 3px solid #0B0E14;'></div>
+                                        {line_div}
+                                        <div style='background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; font-size: 1.1rem; color: #F8FAFC; font-weight: 500; margin-bottom: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);'>
+                                            {step}
+                                        </div>
+                                    </div>
+                                    """)
+                                prog_html += "</div>"
+                                st.markdown(re.sub(r"\s+", " ", prog_html).strip(), unsafe_allow_html=True)
                             else:
                                 st.markdown("No objective upward role progression was detected from the extracted resume text.")
 
@@ -824,9 +953,22 @@ def main():
                             timeline_entries = extract_career_timeline(row['Resume Text'])
 
                             if timeline_entries:
-                                timeline_df = pd.DataFrame(timeline_entries)
-                                timeline_df = timeline_df.rename(columns={'date': 'Date Range', 'context': 'Context'})
-                                st.table(timeline_df)
+                                time_html = textwrap.dedent("""
+                                <div style='display: flex; flex-direction: column; gap: 20px; margin-top: 20px; font-family: Outfit, sans-serif;'>
+                                """)
+                                for entry in timeline_entries:
+                                    time_html += textwrap.dedent(f"""
+                                    <div style='display: flex; align-items: stretch; background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.15);'>
+                                        <div style='background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%); padding: 24px; display: flex; align-items: center; justify-content: center; min-width: 180px; font-weight: 800; font-size: 1.2rem; color: #FFFFFF; text-align: center; border-right: 1px solid rgba(255,255,255,0.1);'>
+                                            {entry['date']}
+                                        </div>
+                                        <div style='padding: 24px; font-size: 1.1rem; color: #E0E7FF; line-height: 1.6;'>
+                                            {entry['context']}
+                                        </div>
+                                    </div>
+                                    """)
+                                time_html += "</div>"
+                                st.markdown(re.sub(r"\s+", " ", time_html).strip(), unsafe_allow_html=True)
                             else:
                                 st.info('Could not automatically extract standard date ranges.')
             else:

@@ -8,7 +8,7 @@ We are looking for a backend engineer who can bridge the gap between machine lea
 Required Skills (Comma-separated for your UI):
 Python, Streamlit, scikit-learn, AWS, Docker, SQL, Agile
 
-(Testing Note: Sarah's resume should score an "Excellent Match" for this JD, hitting almost all the required skills).
+(Testing Note: Sarah's resume should score an "Excellent Match" for this JD, hitting almost all the required skills). 
 
 
 🎯 Job Description & Skills for Resume 2 - [nlp_resume_2.pdf]
