@@ -9,7 +9,7 @@ import textwrap
 import streamlit as st
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import simpleSplit
@@ -17,11 +17,6 @@ from io import BytesIO
 
 # Load environment variables
 load_dotenv()
-
-# Configure Gemini once at startup with the API key from .env
-_gemini_api_key = os.getenv("GEMINI_API_KEY")
-if _gemini_api_key and _gemini_api_key != "your_gemini_api_key_here":
-    genai.configure(api_key=_gemini_api_key)
 
 import pickle
 import docx  # Extract text from Word file
@@ -39,7 +34,7 @@ import textwrap
 import streamlit as st
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import simpleSplit
@@ -47,11 +42,6 @@ from io import BytesIO
 
 # Load environment variables
 load_dotenv()
-
-# Configure Gemini once at startup with the API key from .env
-_gemini_api_key = os.getenv("GEMINI_API_KEY")
-if _gemini_api_key and _gemini_api_key != "your_gemini_api_key_here":
-    genai.configure(api_key=_gemini_api_key)
 
 import pickle
 import docx  # Extract text from Word file
@@ -66,6 +56,13 @@ import pandas as pd
 from transformers import pipeline
 import urllib.parse
 import markdown
+
+
+def get_gemini_client():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or api_key == "your_gemini_api_key_here":
+        raise ValueError("Gemini API key is not configured.")
+    return genai.Client(api_key=api_key)
 
 def markdown_to_styled_html(text):
     # Remove code fences if any
@@ -236,10 +233,7 @@ def format_career_coaching_response(text):
 
     if re.search(r'<(div|h[1-6]|table|ul|ol|p|li)\b', text, re.IGNORECASE):
         return sanitize_html_response(text)
-                                
-                            except Exception as e:
-                                st.error(f"An error occurred: {str(e)}")
-                                
+
         elif selected_feature == "🔍 Live Job & Internship Search":
             st.markdown("### 🔍 Live Job & Internship Search (Real-Time)")
             st.markdown("Enter your skills and preferences. Our AI will determine the exact 5 job titles you are best suited for, and automatically generate real-time search links filtered for the **latest** job postings.")
@@ -264,7 +258,7 @@ def format_career_coaching_response(text):
                     else:
                         with st.spinner("Analyzing your profile to find the best job titles..."):
                             try:
-                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                client = get_gemini_client()
                                 
                                 prompt = f'''
 Based on the candidate's skills below, predict the top 5 exact job titles they are best suited for.
@@ -273,7 +267,7 @@ Return ONLY a comma-separated list of the 5 job titles. Do NOT include numbers, 
 Candidate Skills: {user_skills}
 Target Type: {job_type}
 '''
-                                response = model.generate_content(prompt)
+                                response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                                 titles_raw = response.text
                                 
                                 # Parse the comma separated titles
@@ -361,9 +355,9 @@ Target Type: {job_type}
                     else:
                         with st.spinner("Drafting a compelling cover letter..."):
                             try:
-                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                client = get_gemini_client()
                                 prompt = f"Write a professional, compelling cover letter for {name} based on this resume:\n{final_resume_text}\n\nTarget Job Description:\n{jd_text}\n\nDo not include placeholders, make it sound confident and highlight matching skills."
-                                response = model.generate_content(prompt)
+                                response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                                 st.success("Cover Letter Generated!")
                                 st.markdown("""<div style="background-color: rgba(30, 41, 59, 0.6); padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); margin-top: 20px;">""", unsafe_allow_html=True)
                                 st.markdown(response.text)
@@ -399,9 +393,9 @@ Target Type: {job_type}
                     else:
                         with st.spinner("Analyzing keywords and formatting..."):
                             try:
-                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                client = get_gemini_client()
                                 prompt = f"Act as an ATS Optimization Expert. Analyze this resume against the JD.\nResume:\n{final_resume_text}\n\nJD:\n{jd_text}\n\n1. Provide an estimated ATS match score.\n2. Identify exactly which keywords are missing.\n3. Suggest 3 specific wording changes (e.g. Replace 'Did X' with 'Engineered X resulting in Y')."
-                                response = model.generate_content(prompt)
+                                response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                                 st.success("Optimization Report Ready!")
                                 st.markdown("""<div style="background-color: rgba(30, 41, 59, 0.6); padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); margin-top: 20px;">""", unsafe_allow_html=True)
                                 st.markdown(response.text)
@@ -437,9 +431,9 @@ Target Type: {job_type}
                     else:
                         with st.spinner("Preparing your custom interview panel..."):
                             try:
-                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                client = get_gemini_client()
                                 prompt = f"Act as a Senior Hiring Manager. Based on the candidate's resume and the JD, generate 5 highly specific interview questions (3 technical/role-specific, 2 behavioral).\nResume:\n{final_resume_text}\n\nJD:\n{jd_text}\n\nProvide the questions, and briefly explain what a 'good answer' should include for each."
-                                response = model.generate_content(prompt)
+                                response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                                 st.success("Questions Generated! Time to practice.")
                                 st.markdown("""<div style="background-color: rgba(30, 41, 59, 0.6); padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); margin-top: 20px;">""", unsafe_allow_html=True)
                                 st.markdown(response.text)
@@ -466,9 +460,9 @@ Target Type: {job_type}
                     else:
                         with st.spinner("Architecting your project..."):
                             try:
-                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                client = get_gemini_client()
                                 prompt = f"Act as a Senior Developer and Mentor. The user wants to learn {skill} to add to their resume. Their current level is {level}. Give them a step-by-step blueprint for a weekend portfolio project they can build to honestly claim this skill on their resume. Include architecture, tools needed, and steps."
-                                response = model.generate_content(prompt)
+                                response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                                 st.success("Project Blueprint Generated!")
                                 st.markdown("""<div style="background-color: rgba(30, 41, 59, 0.6); padding: 30px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); margin-top: 20px;">""", unsafe_allow_html=True)
                                 st.markdown(response.text)

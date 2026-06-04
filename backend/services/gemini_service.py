@@ -1,29 +1,60 @@
 import os
-import google.generativeai as genai
+from google import genai
 import json
 import urllib.parse
+import time
+import threading
+
+# Global rate limiter state
+_last_request_time = 0.0
+_rate_limit_lock = threading.Lock()
+
+def _wait_for_rate_limit():
+    global _last_request_time
+    with _rate_limit_lock:
+        current_time = time.time()
+        # Enforce a 4.1-second delay between requests to stay safely under 15 RPM
+        elapsed = current_time - _last_request_time
+        if elapsed < 4.1:
+            time.sleep(4.1 - elapsed)
+        _last_request_time = time.time()
+
+def generate_with_retry(model, prompt, max_retries=3):
+    import re
+    for attempt in range(max_retries):
+        _wait_for_rate_limit()
+        try:
+            return model.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str and attempt < max_retries - 1:
+                match = re.search(r'retry in (\d+\.?\d*)s', error_str)
+                delay = float(match.group(1)) + 1 if match else 35.0
+                print(f"Rate limit hit. Retrying in {delay:.2f} seconds (Attempt {attempt + 1}/{max_retries})...")
+                time.sleep(delay)
+            else:
+                raise
 
 def get_model():
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key or api_key == "your_gemini_api_key_here":
         raise Exception("Gemini API key is not configured.")
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-2.5-flash')
+    return genai.Client(api_key=api_key)
 
 def generate_cover_letter(name: str, resume_text: str, jd_text: str) -> str:
     model = get_model()
     prompt = f"Write a professional, compelling cover letter for {name} based on this resume:\n{resume_text}\n\nTarget Job Description:\n{jd_text}\n\nDo not include placeholders, make it sound confident and highlight matching skills."
-    return model.generate_content(prompt).text
+    return generate_with_retry(model, prompt).text
 
 def boost_ats_score(resume_text: str, jd_text: str) -> str:
     model = get_model()
     prompt = f"Act as an ATS Optimization Expert. Analyze this resume against the JD.\nResume:\n{resume_text}\n\nJD:\n{jd_text}\n\n1. Provide an estimated ATS match score.\n2. Identify exactly which keywords are missing.\n3. Suggest 3 specific wording changes (e.g. Replace 'Did X' with 'Engineered X resulting in Y')."
-    return model.generate_content(prompt).text
+    return generate_with_retry(model, prompt).text
 
 def generate_interview_questions(resume_text: str, jd_text: str) -> str:
     model = get_model()
     prompt = f"Act as a Senior Hiring Manager. Based on the candidate's resume and the JD, generate 5 highly specific interview questions (3 technical/role-specific, 2 behavioral).\nResume:\n{resume_text}\n\nJD:\n{jd_text}\n\nProvide the questions, and briefly explain what a 'good answer' should include for each."
-    return model.generate_content(prompt).text
+    return generate_with_retry(model, prompt).text
 
 def build_resume(details: dict) -> str:
     model = get_model()
@@ -80,7 +111,7 @@ Rules:
 - If any field data is missing, infer reasonable professional defaults based on the job title
 '''
     try:
-        response = model.generate_content(prompt)
+        response = generate_with_retry(model, prompt)
         text = response.text.strip()
         if text.startswith("```json"):
             text = text[7:]
@@ -117,12 +148,12 @@ CRITICAL MARKDOWN RULES:
 - Only use ONE dashed separator row directly below the header (e.g. |---|---|).
 - NEVER use horizontal dashed lines (like |---|) between normal rows or at the bottom of the table. This will break the UI parser!
 '''
-    return model.generate_content(prompt).text
+    return generate_with_retry(model, prompt).text
 
 def project_idea_generator(skill: str, level: str) -> str:
     model = get_model()
     prompt = f"Act as a Senior Developer and Mentor. The user wants to learn {skill} to add to their resume. Their current level is {level}. Give them a step-by-step blueprint for a weekend portfolio project they can build to honestly claim this skill on their resume. Include architecture, tools needed, and steps."
-    return model.generate_content(prompt).text
+    return generate_with_retry(model, prompt).text
 
 def live_job_search(details: dict) -> list:
     model = get_model()
@@ -150,7 +181,7 @@ Schema for each object:
 }}
 '''
     try:
-        response = model.generate_content(prompt)
+        response = generate_with_retry(model, prompt)
         text = response.text.strip()
         if text.startswith("```json"):
             text = text[7:]
@@ -246,7 +277,7 @@ Perform a comprehensive analysis and return the result ONLY as a valid JSON obje
 Ensure the JSON is strictly valid. Do NOT return anything outside the JSON object.
 '''
     try:
-        response = model.generate_content(prompt)
+        response = generate_with_retry(model, prompt)
         text = response.text.strip()
         if text.startswith("```json"):
             text = text[7:]
