@@ -169,3 +169,142 @@ label {
   margin-bottom: 5px;
   display: block;
 }
+
+/* Print/Download Styles for AI Resume Builder */
+@media print {
+  /* Set body to standard white and hide all normal elements */
+  body, html, #root {
+    background: #ffffff !important;
+    background-image: none !important;
+    color: #111827 !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  /* Make only the resume area visible */
+  #resume-print-area, #resume-print-area * {
+    visibility: visible;
+  }
+
+  /* Position it perfectly at the top left */
+  #resume-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Clean up resume components for professional white-paper printing */
+  .resume-container {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .resume-header {
+    border-bottom: 2px solid #e5e7eb !important;
+  }
+
+  .resume-header h1, .resume-name {
+    color: #111827 !important;
+  }
+
+  .resume-contact, .resume-contact span {
+    color: #4b5563 !important;
+  }
+
+  .resume-section-bar {
+    background: #4f46e5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .resume-section-title {
+    color: #4f46e5 !important;
+  }
+
+  .resume-section-divider {
+    background: #e5e7eb !important;
+  }
+
+  .resume-summary-text {
+    color: #1f2937 !important;
+  }
+
+  .resume-skills-category {
+    color: #374151 !important;
+  }
+
+  .resume-skill-badge {
+    background: #f3f4f6 !important;
+    border: 1px solid #d1d5db !important;
+    color: #1f2937 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .resume-project-card {
+    background: transparent !important;
+    border: 1px solid #e5e7eb !important;
+    padding: 15px !important;
+    margin-bottom: 10px !important;
+    page-break-inside: avoid;
+  }
+
+  .resume-project-title {
+    color: #111827 !important;
+  }
+
+  .resume-project-tech {
+    background: #f0f9ff !important;
+    border: 1px solid #bae6fd !important;
+    color: #0369a1 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .resume-project-year {
+    color: #4b5563 !important;
+    background: #f3f4f6 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .resume-project-bullet {
+    color: #374151 !important;
+  }
+
+  .resume-project-bullet-dot {
+    background: #4f46e5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .resume-education-degree {
+    color: #111827 !important;
+  }
+
+  .resume-education-details {
+    color: #4b5563 !important;
+  }
+
+  .resume-cert-item {
+    color: #374151 !important;
+  }
+
+  /* Hide print buttons and extra components inside print container */
+  .no-print {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}

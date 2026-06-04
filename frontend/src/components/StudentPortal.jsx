@@ -76,6 +76,18 @@ export default function StudentPortal({ onExit }) {
     setLoading(false);
   };
 
+  const handleDownload = () => {
+    const originalTitle = document.title;
+    try {
+      const parsed = JSON.parse(result);
+      if (parsed.name) {
+        document.title = `${parsed.name.replace(/\s+/g, '_')}_Resume`;
+      }
+    } catch (e) {}
+    window.print();
+    document.title = originalTitle;
+  };
+
   return (
     <div style={{ padding: '40px' }}>
       <button className="btn-danger-modern" onClick={onExit} style={{ marginBottom: '20px' }}>
@@ -241,10 +253,10 @@ export default function StudentPortal({ onExit }) {
                     // Try parsing the JSON
                     const parsed = JSON.parse(result);
                     return (
-                      <div style={{ background: '#1a1d2e', padding: '40px', borderRadius: '16px', border: '1px solid rgba(99, 102, 241, 0.2)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                        <div style={{ borderBottom: '2px solid rgba(255,255,255,0.05)', paddingBottom: '20px', marginBottom: '25px', textAlign: 'center' }}>
-                          <h1 style={{ fontSize: '28px', color: 'white', margin: '0 0 10px 0', fontWeight: '800' }}>{parsed.name || 'Unknown Name'}</h1>
-                          <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', color: '#94a3b8', fontSize: '14px' }}>
+                      <div id="resume-print-area" className="resume-container" style={{ background: '#1a1d2e', padding: '40px', borderRadius: '16px', border: '1px solid rgba(99, 102, 241, 0.2)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                        <div className="resume-header" style={{ borderBottom: '2px solid rgba(255,255,255,0.05)', paddingBottom: '20px', marginBottom: '25px', textAlign: 'center' }}>
+                          <h1 className="resume-name" style={{ fontSize: '28px', color: 'white', margin: '0 0 10px 0', fontWeight: '800' }}>{parsed.name || 'Unknown Name'}</h1>
+                          <div className="resume-contact" style={{ display: 'flex', justifyContent: 'center', gap: '15px', color: '#94a3b8', fontSize: '14px' }}>
                             <span>{parsed.email || 'No Email'}</span>
                             <span style={{ color: '#475569' }}>•</span>
                             <span>{parsed.phone || 'No Phone'}</span>
@@ -254,31 +266,31 @@ export default function StudentPortal({ onExit }) {
                         </div>
 
                         {parsed.summary && (
-                          <div style={{ marginBottom: '30px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                              <div style={{ width: '3px', height: '16px', background: '#6366f1' }}></div>
-                              <h3 style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a5b4fc', margin: 0 }}>Professional Summary</h3>
-                              <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
+                          <div className="resume-section" style={{ marginBottom: '30px' }}>
+                            <div className="resume-section-header" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                              <div className="resume-section-bar" style={{ width: '3px', height: '16px', background: '#6366f1' }}></div>
+                              <h3 className="resume-section-title" style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a5b4fc', margin: 0 }}>Professional Summary</h3>
+                              <div className="resume-section-divider" style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
                             </div>
-                            <p style={{ fontStyle: 'italic', color: '#cbd5e1', lineHeight: '1.7', margin: 0, padding: '0 10px' }}>{parsed.summary}</p>
+                            <p className="resume-summary-text" style={{ fontStyle: 'italic', color: '#cbd5e1', lineHeight: '1.7', margin: 0, padding: '0 10px' }}>{parsed.summary}</p>
                           </div>
                         )}
 
                         {parsed.skills && Object.keys(parsed.skills).length > 0 && (
-                          <div style={{ marginBottom: '30px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                              <div style={{ width: '3px', height: '16px', background: '#6366f1' }}></div>
-                              <h3 style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a5b4fc', margin: 0 }}>Core Competencies</h3>
-                              <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
+                          <div className="resume-section" style={{ marginBottom: '30px' }}>
+                            <div className="resume-section-header" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                              <div className="resume-section-bar" style={{ width: '3px', height: '16px', background: '#6366f1' }}></div>
+                              <h3 className="resume-section-title" style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a5b4fc', margin: 0 }}>Core Competencies</h3>
+                              <div className="resume-section-divider" style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '0 10px' }}>
+                            <div className="resume-skills-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '0 10px' }}>
                               {Object.entries(parsed.skills).map(([cat, skillsArr]) => (
                                 skillsArr && skillsArr.length > 0 && (
-                                  <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-                                    <strong style={{ color: '#94a3b8', fontSize: '13px', textTransform: 'capitalize', width: '90px' }}>{cat}:</strong>
-                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                  <div key={cat} className="resume-skills-row" style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+                                    <strong className="resume-skills-category" style={{ color: '#94a3b8', fontSize: '13px', textTransform: 'capitalize', width: '90px' }}>{cat}:</strong>
+                                    <div className="resume-skills-tags" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                       {skillsArr.map((skill, i) => (
-                                        <span key={i} style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#a5b4fc', padding: '4px 10px', borderRadius: '20px', fontSize: '12px' }}>{skill}</span>
+                                        <span key={i} className="resume-skill-badge" style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#a5b4fc', padding: '4px 10px', borderRadius: '20px', fontSize: '12px' }}>{skill}</span>
                                       ))}
                                     </div>
                                   </div>
@@ -289,26 +301,26 @@ export default function StudentPortal({ onExit }) {
                         )}
 
                         {parsed.projects && parsed.projects.length > 0 && (
-                          <div style={{ marginBottom: '30px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                              <div style={{ width: '3px', height: '16px', background: '#6366f1' }}></div>
-                              <h3 style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a5b4fc', margin: 0 }}>Professional Experience</h3>
-                              <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
+                          <div className="resume-section" style={{ marginBottom: '30px' }}>
+                            <div className="resume-section-header" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                              <div className="resume-section-bar" style={{ width: '3px', height: '16px', background: '#6366f1' }}></div>
+                              <h3 className="resume-section-title" style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a5b4fc', margin: 0 }}>Professional Experience</h3>
+                              <div className="resume-section-divider" style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', padding: '0 10px' }}>
+                            <div className="resume-projects-list" style={{ display: 'flex', flexDirection: 'column', gap: '15px', padding: '0 10px' }}>
                               {parsed.projects.map((proj, i) => (
-                                <div key={i} style={{ background: '#1e2235', padding: '20px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                                <div key={i} className="resume-project-card" style={{ background: '#1e2235', padding: '20px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                                  <div className="resume-project-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                                     <div>
-                                      <h4 style={{ margin: '0 0 8px 0', color: '#e2e8f0', fontSize: '16px' }}>{proj.name}</h4>
-                                      {proj.tech && <span style={{ background: 'rgba(14, 165, 233, 0.1)', color: '#0ea5e9', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', border: '1px solid rgba(14, 165, 233, 0.2)' }}>{proj.tech}</span>}
+                                      <h4 className="resume-project-title" style={{ margin: '0 0 8px 0', color: '#e2e8f0', fontSize: '16px' }}>{proj.name}</h4>
+                                      {proj.tech && <span className="resume-project-tech" style={{ background: 'rgba(14, 165, 233, 0.1)', color: '#0ea5e9', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', border: '1px solid rgba(14, 165, 233, 0.2)' }}>{proj.tech}</span>}
                                     </div>
-                                    <span style={{ color: '#64748b', fontSize: '13px', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '15px' }}>{proj.year}</span>
+                                    <span className="resume-project-year" style={{ color: '#64748b', fontSize: '13px', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '15px' }}>{proj.year}</span>
                                   </div>
-                                  <ul style={{ margin: '15px 0 0 0', padding: 0, listStyle: 'none' }}>
+                                  <ul className="resume-project-bullets" style={{ margin: '15px 0 0 0', padding: 0, listStyle: 'none' }}>
                                     {proj.bullets && proj.bullets.map((bullet, j) => (
-                                      <li key={j} style={{ position: 'relative', paddingLeft: '15px', color: '#cbd5e1', fontSize: '14px', marginBottom: '8px', lineHeight: '1.5' }}>
-                                        <span style={{ position: 'absolute', left: 0, top: '8px', width: '5px', height: '5px', borderRadius: '50%', background: '#6366f1' }}></span>
+                                      <li key={j} className="resume-project-bullet" style={{ position: 'relative', paddingLeft: '15px', color: '#cbd5e1', fontSize: '14px', marginBottom: '8px', lineHeight: '1.5' }}>
+                                        <span className="resume-project-bullet-dot" style={{ position: 'absolute', left: 0, top: '8px', width: '5px', height: '5px', borderRadius: '50%', background: '#6366f1' }}></span>
                                         {bullet}
                                       </li>
                                     ))}
@@ -319,19 +331,19 @@ export default function StudentPortal({ onExit }) {
                           </div>
                         )}
 
-                        <div style={{ display: 'flex', gap: '30px' }}>
+                        <div className="resume-education-certifications" style={{ display: 'flex', gap: '30px' }}>
                           {parsed.education && parsed.education.length > 0 && (
-                            <div style={{ flex: 1 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                                <div style={{ width: '3px', height: '16px', background: '#6366f1' }}></div>
-                                <h3 style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a5b4fc', margin: 0 }}>Education</h3>
-                                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
+                            <div className="resume-education-section" style={{ flex: 1 }}>
+                              <div className="resume-section-header" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                                <div className="resume-section-bar" style={{ width: '3px', height: '16px', background: '#6366f1' }}></div>
+                                <h3 className="resume-section-title" style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a5b4fc', margin: 0 }}>Education</h3>
+                                <div className="resume-section-divider" style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
                               </div>
-                              <div style={{ padding: '0 10px' }}>
+                              <div className="resume-education-list" style={{ padding: '0 10px' }}>
                                 {parsed.education.map((edu, i) => (
-                                  <div key={i} style={{ marginBottom: '10px' }}>
-                                    <div style={{ fontWeight: 'bold', color: '#e2e8f0', fontSize: '14px' }}>{edu.degree}</div>
-                                    <div style={{ color: '#94a3b8', fontSize: '13px' }}>{edu.institution} <span style={{ margin: '0 5px' }}>•</span> {edu.year}</div>
+                                  <div key={i} className="resume-education-item" style={{ marginBottom: '10px' }}>
+                                    <div className="resume-education-degree" style={{ fontWeight: 'bold', color: '#e2e8f0', fontSize: '14px' }}>{edu.degree}</div>
+                                    <div className="resume-education-details" style={{ color: '#94a3b8', fontSize: '13px' }}>{edu.institution} <span style={{ margin: '0 5px' }}>•</span> {edu.year}</div>
                                   </div>
                                 ))}
                               </div>
@@ -339,22 +351,22 @@ export default function StudentPortal({ onExit }) {
                           )}
 
                           {parsed.certifications && parsed.certifications.length > 0 && (
-                            <div style={{ flex: 1 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                                <div style={{ width: '3px', height: '16px', background: '#6366f1' }}></div>
-                                <h3 style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a5b4fc', margin: 0 }}>Certifications</h3>
-                                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
+                            <div className="resume-certs-section" style={{ flex: 1 }}>
+                              <div className="resume-section-header" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                                <div className="resume-section-bar" style={{ width: '3px', height: '16px', background: '#6366f1' }}></div>
+                                <h3 className="resume-section-title" style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#a5b4fc', margin: 0 }}>Certifications</h3>
+                                <div className="resume-section-divider" style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
                               </div>
-                              <ul style={{ padding: '0 10px', margin: 0, listStyle: 'none' }}>
+                              <ul className="resume-certs-list" style={{ padding: '0 10px', margin: 0, listStyle: 'none' }}>
                                 {parsed.certifications.map((cert, i) => (
-                                  <li key={i} style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '5px' }}>• {cert}</li>
+                                  <li key={i} className="resume-cert-item" style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '5px' }}>• {cert}</li>
                                 ))}
                               </ul>
                             </div>
                           )}
                         </div>
 
-                        <button style={{ marginTop: '30px', width: '100%', padding: '15px', background: 'linear-gradient(to right, #4f46e5, #7c3aed)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', fontSize: '16px' }} onClick={() => alert("Download functionality to be implemented!")}>
+                        <button className="no-print" style={{ marginTop: '30px', width: '100%', padding: '15px', background: 'linear-gradient(to right, #4f46e5, #7c3aed)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', fontSize: '16px' }} onClick={handleDownload}>
                           <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                           Download Resume
                         </button>
