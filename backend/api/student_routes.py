@@ -52,15 +52,15 @@ async def cover_letter(request: CoverLetterRequest):
 async def ats_booster(request: ATSBoosterRequest):
     try:
         result = gemini_service.boost_ats_score(request.resume_text, request.jd_text)
-        return {"report": result}
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/interview-prep")
 async def interview_prep(request: InterviewPrepRequest):
     try:
-        result = gemini_service.generate_interview_questions(request.resume_text, request.jd_text)
-        return {"questions": result}
+        result = gemini_service.analyze_interview_prep(request.dict())
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

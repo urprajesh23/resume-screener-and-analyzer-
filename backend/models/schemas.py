@@ -37,6 +37,8 @@ class ATSBoosterRequest(BaseModel):
 class InterviewPrepRequest(BaseModel):
     resume_text: str
     jd_text: str
+    company_name: Optional[str] = None
+    role: Optional[str] = None
 
 class ProjectIdeaRequest(BaseModel):
     skill: str

@@ -1,5 +1,6 @@
 import os
 from google import genai
+from google.genai import types
 import json
 import urllib.parse
 import time
@@ -19,12 +20,12 @@ def _wait_for_rate_limit():
             time.sleep(4.1 - elapsed)
         _last_request_time = time.time()
 
-def generate_with_retry(model, prompt, max_retries=3):
+def generate_with_retry(model, prompt, config=None, max_retries=3):
     import re
     for attempt in range(max_retries):
         _wait_for_rate_limit()
         try:
-            return model.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+            return model.models.generate_content(model='gemini-2.5-flash', contents=prompt, config=config)
         except Exception as e:
             error_str = str(e)
             if "429" in error_str and attempt < max_retries - 1:
@@ -46,15 +47,164 @@ def generate_cover_letter(name: str, resume_text: str, jd_text: str) -> str:
     prompt = f"Write a professional, compelling cover letter for {name} based on this resume:\n{resume_text}\n\nTarget Job Description:\n{jd_text}\n\nDo not include placeholders, make it sound confident and highlight matching skills."
     return generate_with_retry(model, prompt).text
 
-def boost_ats_score(resume_text: str, jd_text: str) -> str:
+def boost_ats_score(resume_text: str, jd_text: str) -> dict:
+    import backend.services.ml_service as ml_service
     model = get_model()
-    prompt = f"Act as an ATS Optimization Expert. Analyze this resume against the JD.\nResume:\n{resume_text}\n\nJD:\n{jd_text}\n\n1. Provide an estimated ATS match score.\n2. Identify exactly which keywords are missing.\n3. Suggest 3 specific wording changes (e.g. Replace 'Did X' with 'Engineered X resulting in Y')."
-    return generate_with_retry(model, prompt).text
+    
+    # 1. Local parsing to find missing keywords
+    skills_gap = ml_service.analyze_skill_gap(resume_text, jd_text)
+    missing_skills = skills_gap.get('missing_skills', [])
+    
+    # 2. Local semantic match score as a baseline anchor
+    raw_similarity = ml_service.calculate_match_score(ml_service.clean_resume(resume_text), jd_text)
+    local_score = ml_service.scale_match_score(raw_similarity)
 
-def generate_interview_questions(resume_text: str, jd_text: str) -> str:
+    prompt = f'''
+Act as an expert ATS (Applicant Tracking System) Optimization specialist.
+Analyze the candidate's Resume against the Job Description (JD) and provide a highly targeted ATS score boost analysis in JSON format.
+
+Inputs:
+- Resume: {resume_text}
+- Job Description: {jd_text}
+- Locally Identified Missing Keywords: {json.dumps(missing_skills)}
+- Local Similarity Match Score: {local_score}
+
+Your task:
+1. **Calculate hybrid ATS Score**: Formulate a final ATS Match Score (0 to 100) based on the local similarity match score and your own deep semantic evaluation. 
+2. **Identify Missing Keywords**: Review the locally identified missing keywords and cross-reference them. Choose the top 10-15 most critical keywords/skills that are actually relevant to the role and missing in the resume text.
+3. **Generate Professional Summary Rewrites**: Rewrite the candidate's professional summary to be highly optimized for the target role, integrating missing key terms naturally.
+4. **Wording Replacements**: Identify 3 to 5 specific sentences or bullet points in the raw Resume that are weak, and suggest high-impact rewrites for each. Each replacement must specify:
+   - "original": The exact text from the resume (MUST match a substring in the resume exactly so it can be replaced automatically).
+   - "suggested": The new optimized bullet point integrating missing keywords.
+   - "reason": Rationale for the change.
+
+Return your response ONLY as a VALID JSON object matching this schema. No markdown headers or commentary:
+{{
+  "ats_score": 75,
+  "missing_keywords": ["MLOps", "CI/CD", "Docker"],
+  "new_summary": "ATS-optimized professional summary...",
+  "suggestions": [
+    {{
+      "original": "Exact text from original resume",
+      "suggested": "Optimized text with action verbs and metrics",
+      "reason": "Why this change is suggested"
+    }}
+  ]
+}}
+'''
+    try:
+        config = types.GenerateContentConfig(response_mime_type="application/json")
+        response = generate_with_retry(model, prompt, config=config)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+        
+        import re
+        try:
+            return json.loads(text)
+        except Exception:
+            cleaned = re.sub(r'^.*?{', '{', text, flags=re.DOTALL)
+            cleaned = re.sub(r'}.*?$', '}', cleaned, flags=re.DOTALL)
+            return json.loads(cleaned)
+    except Exception as e:
+        print("Error in boost_ats_score:", e)
+        return {
+            "ats_score": int(local_score),
+            "missing_keywords": missing_skills[:10],
+            "new_summary": "Failed to generate optimized summary.",
+            "suggestions": []
+        }
+
+def analyze_interview_prep(details: dict) -> dict:
+    import backend.services.ml_service as ml_service
     model = get_model()
-    prompt = f"Act as a Senior Hiring Manager. Based on the candidate's resume and the JD, generate 5 highly specific interview questions (3 technical/role-specific, 2 behavioral).\nResume:\n{resume_text}\n\nJD:\n{jd_text}\n\nProvide the questions, and briefly explain what a 'good answer' should include for each."
-    return generate_with_retry(model, prompt).text
+    resume_text = details.get("resume_text", "")
+    jd_text = details.get("jd_text", "")
+    company_name = details.get("company_name", "") or ""
+    role = details.get("role", "") or ""
+
+    evidence = ml_service.extract_evidence_and_keywords(resume_text)
+    evidence_json = json.dumps(evidence, indent=2)
+
+    company_clause = f" specifically for the company '{company_name}' and role '{role}'" if (company_name or role) else ""
+    prompt = f'''
+Act as an expert technical recruiter and senior interviewer.
+Analyze the candidate's Resume against the Job Description (JD) and provide a comprehensive interview prep and domain analysis package using a hybrid evaluation approach.
+
+Inputs:
+- Resume: {resume_text}
+- Job Description: {jd_text}
+- Target Company: {company_name or "General / Unspecified"}
+- Target Role: {role or "Target Role based on JD"}
+
+Locally Extracted Evidence & Keyword Matches (for validation):
+{evidence_json}
+
+Your task:
+1. **Domain Strength Scoring**: Identify 3 to 5 core domains required by the Job Description (e.g. Machine Learning, Cloud Systems, Frontend Web, Backend API, Databases). 
+   Score the candidate from 0 to 100 on how strong they are in each domain using a hybrid evaluation:
+   - Carefully review the raw Resume and cross-reference it with the "Locally Extracted Evidence & Keyword Matches" provided above.
+   - A domain (especially highly specialized fields like Machine Learning, AI, Deep Learning, computer vision, etc.) MUST receive a high/good score (70+) ONLY if the candidate's resume shows explicit, concrete evidence of projects, certifications, or awards in that field.
+   - If the candidate lists the domain/skill as a buzzword in a skills list but has 0 corresponding projects, certifications, or awards, or if the local matches show minimal evidence, you MUST assign a lower score (below 50).
+   - For each domain, explain your scoring rationale in a short sentence, explicitly citing the specific projects, certifications, or awards found (e.g., 'Scored 85 because they have a Coursera Neural Networks certificate and built a CNN Classifier project'). If no concrete projects or certificates are present, explain that the score is low due to a lack of hands-on evidence.
+2. **Simplified Focus Suggestions**: Based on the domain scores, suggest 2 to 4 actionable focus areas/topics the candidate needs to develop to cover their gaps.
+3. **Interview Q&A Prep**: Generate interview questions and detailed answers/model response guides.
+   - If a target company or role is specified, generate 10 to 15 highly important, company-specific and role-specific past interview questions with answers.
+   - If no company/role is specified, generate 5 to 7 highly specific role-based technical and behavioral questions with model answers.
+
+Return your response ONLY as a VALID JSON object matching this schema exactly. No markdown headers or wrapper commentary other than the json block wrapper:
+{{
+  "domain_scores": [
+    {{
+      "domain": "Domain Name (e.g., Machine Learning)",
+      "score": 85,
+      "reason": "Rationale referencing specific resume items"
+    }}
+  ],
+  "focus_areas": [
+    "Simplified actionable suggestion on what topics/skills/projects to learn or build"
+  ],
+  "interview_questions": [
+    {{
+      "question": "The interview question",
+      "answer": "Highly detailed response guide and model answer"
+    }}
+  ]
+}}
+'''
+    try:
+        config = types.GenerateContentConfig(response_mime_type="application/json")
+        response = generate_with_retry(model, prompt, config=config)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+        
+        # Clean trailing issues if any
+        import re
+        try:
+            return json.loads(text)
+        except Exception:
+            cleaned = re.sub(r'^.*?{', '{', text, flags=re.DOTALL)
+            cleaned = re.sub(r'}.*?$', '}', cleaned, flags=re.DOTALL)
+            return json.loads(cleaned)
+    except Exception as e:
+        print("Error in analyze_interview_prep:", e)
+        # Fallback response so frontend doesn't crash
+        return {
+            "domain_scores": [{"domain": "Analysis Failed", "score": 0, "reason": str(e)}],
+            "focus_areas": ["Retry generating your interview prep report."],
+            "interview_questions": [{"question": "Failed to load questions", "answer": "Please verify your configuration and try again."}]
+        }
 
 def build_resume(details: dict) -> str:
     model = get_model()

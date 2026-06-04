@@ -170,6 +170,49 @@ label {
   display: block;
 }
 
+/* Domain & Accordion Layout for Interview Prep */
+.domain-card {
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.domain-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(99, 102, 241, 0.2) !important;
+}
+
+.accordion-item {
+  transition: all 0.3s ease;
+}
+
+.accordion-header {
+  font-family: 'Outfit', sans-serif;
+  transition: background-color 0.2s ease;
+}
+
+.accordion-header:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.accordion-header::-webkit-details-marker {
+  display: none;
+}
+
+.accordion-header {
+  list-style: none; /* Hide default triangle in Firefox/Chrome */
+}
+
+.accordion-header::after {
+  content: '▼';
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.3s ease;
+}
+
+.accordion-item[open] .accordion-header::after {
+  transform: rotate(180deg);
+  color: var(--accent-2);
+}
+
 /* Print/Download Styles for AI Resume Builder */
 body.printing-active #root {
   display: none !important;
@@ -362,6 +405,46 @@ body.printing-active .print-container-temp {
   .resume-cert-item {
     color: #374151 !important;
     font-size: 13px !important;
+  }
+
+  /* Custom Print styles for Domain Analysis & Accordions */
+  .domain-card {
+    background: transparent !important;
+    border: 1px solid #e5e7eb !important;
+    padding: 15px !important;
+    margin-bottom: 10px !important;
+  }
+  
+  .domain-card strong {
+    color: #111827 !important;
+  }
+  
+  .domain-card p {
+    color: #4b5563 !important;
+  }
+
+  .accordion-item {
+    background: transparent !important;
+    border: 1px solid #d1d5db !important;
+    margin-bottom: 15px !important;
+    page-break-inside: avoid;
+  }
+  
+  .accordion-header {
+    background: #f3f4f6 !important;
+    color: #111827 !important;
+    border-bottom: 1px solid #d1d5db !important;
+    font-weight: 700 !important;
+  }
+  
+  .accordion-header::after {
+    display: none !important; /* Hide arrow in print view */
+  }
+
+  .accordion-content {
+    background: #ffffff !important;
+    color: #374151 !important;
+    padding: 15px !important;
   }
 
   /* Hide print buttons and extra components inside print container */

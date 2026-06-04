@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -13,8 +13,115 @@ export default function StudentPortal({ onExit }) {
   const [jsData, setJsData] = useState({ skills: '', role: '', work_type: 'Work from home', country: '', state: '', locations: '' });
   const [clData, setClData] = useState({ name: '', resume_text: '', jd_text: '' });
   const [atsData, setAtsData] = useState({ resume_text: '', jd_text: '' });
-  const [miData, setMiData] = useState({ resume_text: '', jd_text: '' });
+  const [miData, setMiData] = useState({ resume_text: '', jd_text: '', company_name: '', role: '' });
   const [piData, setPiData] = useState({ skill: '', level: 'Complete Beginner' });
+  const [generatedResume, setGeneratedResume] = useState(null);
+
+  useEffect(() => {
+    if (activeTool === 'resume-builder' && result) {
+      try {
+        const parsed = JSON.parse(result);
+        setGeneratedResume(parsed);
+      } catch (e) {
+        // ignore non-JSON results
+      }
+    }
+  }, [result, activeTool]);
+
+  const applyOptimization = async () => {
+    if (!result || typeof result !== 'object') return;
+    const boosterResult = result;
+
+    if (generatedResume) {
+      const updated = { ...generatedResume };
+      
+      if (boosterResult.new_summary) {
+        updated.summary = boosterResult.new_summary;
+      }
+      
+      if (boosterResult.suggestions && Array.isArray(boosterResult.suggestions)) {
+        boosterResult.suggestions.forEach(s => {
+          if (!s.original || !s.suggested) return;
+          
+          if (updated.projects && Array.isArray(updated.projects)) {
+            updated.projects = updated.projects.map(proj => {
+              if (proj.bullets && Array.isArray(proj.bullets)) {
+                return {
+                  ...proj,
+                  bullets: proj.bullets.map(bullet => {
+                    const normBullet = bullet.trim().toLowerCase();
+                    const normOrig = s.original.trim().toLowerCase();
+                    if (normBullet.includes(normOrig) || normOrig.includes(normBullet)) {
+                      return s.suggested;
+                    }
+                    return bullet;
+                  })
+                };
+              }
+              return proj;
+            });
+          }
+        });
+      }
+      
+      setGeneratedResume(updated);
+      setResult(JSON.stringify(updated));
+      setActiveTool('resume-builder');
+    } else {
+      let optimizedText = atsData.resume_text;
+      
+      if (boosterResult.suggestions && Array.isArray(boosterResult.suggestions)) {
+        boosterResult.suggestions.forEach(s => {
+          if (s.original && s.suggested) {
+            const escapedOriginal = s.original.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            optimizedText = optimizedText.replace(new RegExp(escapedOriginal, 'gi'), s.suggested);
+          }
+        });
+      }
+      
+      setRbData({
+        name: rbData.name || "Candidate Name",
+        job_title: rbData.job_title || "Target Role",
+        experience: optimizedText
+      });
+      
+      setLoading(true);
+      setActiveTool('resume-builder');
+      setResult('');
+      
+      try {
+        const response = await fetch('http://localhost:8000/api/student/build-resume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: rbData.name || "Candidate Name",
+            job_title: rbData.job_title || "Target Role",
+            experience: optimizedText,
+            email: 'N/A',
+            phone: 'N/A',
+            education: 'N/A',
+            job_desc: atsData.jd_text || 'Standard Context'
+          })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setResult(data.resume_text);
+          try {
+            const parsed = JSON.parse(data.resume_text);
+            setGeneratedResume(parsed);
+          } catch (err) {
+            console.error("Failed parsing auto-generated resume json:", err);
+          }
+        } else {
+          setResult('Error auto-generating optimized resume: ' + data.detail);
+        }
+      } catch (error) {
+        console.error(error);
+        setResult('Error auto-generating optimized resume.');
+      }
+      setLoading(false);
+    }
+  };
 
   const tools = [
     { id: 'resume-builder', icon: '📄', name: 'AI Resume Builder' },
@@ -22,7 +129,7 @@ export default function StudentPortal({ onExit }) {
     { id: 'job-search', icon: '🔍', name: 'Live Job Search' },
     { id: 'cover-letter', icon: '✉️', name: 'AI Cover Letter' },
     { id: 'ats-booster', icon: '⚡', name: 'ATS Score Booster' },
-    { id: 'mock-interview', icon: '🎤', name: 'Mock Interview Prep' },
+    { id: 'mock-interview', icon: '🎤', name: 'Interview Prep' },
     { id: 'project-idea', icon: '🏗️', name: 'Project Idea Generator' },
   ];
 
@@ -61,7 +168,9 @@ export default function StudentPortal({ onExit }) {
       });
       const data = await response.json();
       if (response.ok) {
-        if (Array.isArray(data[resultKey]) && data[resultKey].length > 0 && typeof data[resultKey][0] === 'string') {
+        if (!resultKey) {
+          setResult(data);
+        } else if (Array.isArray(data[resultKey]) && data[resultKey].length > 0 && typeof data[resultKey][0] === 'string') {
           setResult(data[resultKey].join(', '));
         } else {
           setResult(data[resultKey]);
@@ -85,6 +194,12 @@ export default function StudentPortal({ onExit }) {
     printContainer.id = 'print-container-temp';
     printContainer.className = 'print-container-temp';
     printContainer.innerHTML = resumeEl.innerHTML;
+
+    // Force-open all <details> tags in the print container to reveal Q&As
+    const detailsTags = printContainer.querySelectorAll('details');
+    detailsTags.forEach(details => {
+      details.setAttribute('open', 'true');
+    });
 
     // Append to body and mark printing state
     document.body.appendChild(printContainer);
@@ -222,7 +337,7 @@ export default function StudentPortal({ onExit }) {
               <label>Target Job Description</label>
               <textarea value={atsData.jd_text} onChange={e => setAtsData({...atsData, jd_text: e.target.value})} rows="4" placeholder="Paste Job Description here..."></textarea>
               
-              <button className="btn-modern" onClick={() => submitToAPI('ats-booster', atsData, 'report')} disabled={loading} style={{ marginTop: '20px', width: '100%' }}>
+              <button className="btn-modern" onClick={() => submitToAPI('ats-booster', atsData)} disabled={loading} style={{ marginTop: '20px', width: '100%' }}>
                 {loading ? '⏳ Analyzing...' : '⚡ Boost ATS Score'}
               </button>
             </>
@@ -230,7 +345,7 @@ export default function StudentPortal({ onExit }) {
 
           {activeTool === 'mock-interview' && (
             <>
-              <h2>🎤 AI Mock Interview Prep</h2>
+              <h2>🎤 Interview Prep & Domain Analysis</h2>
               <label>Upload Resume</label>
               <input type="file" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg" onChange={e => handleFileUpload(e, text => setMiData({...miData, resume_text: text}), miData.resume_text)} />
               <label>Resume Text</label>
@@ -238,8 +353,13 @@ export default function StudentPortal({ onExit }) {
               <label>Target Job Description</label>
               <textarea value={miData.jd_text} onChange={e => setMiData({...miData, jd_text: e.target.value})} rows="4" placeholder="Paste Job Description here..."></textarea>
               
-              <button className="btn-modern" onClick={() => submitToAPI('interview-prep', miData, 'questions')} disabled={loading} style={{ marginTop: '20px', width: '100%' }}>
-                {loading ? '⏳ Preparing...' : '🎤 Generate Custom Questions'}
+              <label>Target Company (Optional)</label>
+              <input type="text" value={miData.company_name} onChange={e => setMiData({...miData, company_name: e.target.value})} placeholder="e.g. Google, Amazon, Meta" />
+              <label>Target Role (Optional)</label>
+              <input type="text" value={miData.role} onChange={e => setMiData({...miData, role: e.target.value})} placeholder="e.g. Machine Learning Engineer, Backend Developer" />
+
+              <button className="btn-modern" onClick={() => submitToAPI('interview-prep', miData)} disabled={loading} style={{ marginTop: '20px', width: '100%' }}>
+                {loading ? '⏳ Analyzing & Generating...' : '✨ Generate Prep Package & Analyze Domains'}
               </button>
             </>
           )}
@@ -428,6 +548,163 @@ export default function StudentPortal({ onExit }) {
                       )}
                     </div>
                   ))}
+                </div>
+              ) : activeTool === 'ats-booster' && typeof result === 'object' && result.ats_score !== undefined ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                  {/* Circular Score Gauge */}
+                  <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '35px' }}>
+                    <h3 style={{ color: '#a5b4fc', margin: 0, fontSize: '18px' }}>📊 Estimated ATS Match Score</h3>
+                    <div style={{ position: 'relative', width: '150px', height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg style={{ transform: 'rotate(-90deg)', width: '150px', height: '150px' }}>
+                        <circle cx="75" cy="75" r="65" stroke="rgba(255,255,255,0.05)" strokeWidth="12" fill="transparent" />
+                        <circle 
+                          cx="75" 
+                          cy="75" 
+                          r="65" 
+                          stroke={result.ats_score >= 80 ? '#10b981' : result.ats_score >= 50 ? '#f59e0b' : '#ef4444'} 
+                          strokeWidth="12" 
+                          fill="transparent" 
+                          strokeDasharray={2 * Math.PI * 65} 
+                          strokeDashoffset={2 * Math.PI * 65 * (1 - result.ats_score / 100)} 
+                          strokeLinecap="round"
+                          style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+                        />
+                      </svg>
+                      <div style={{ position: 'absolute', fontSize: '36px', fontWeight: '800', color: 'white' }}>
+                        {result.ats_score}%
+                      </div>
+                    </div>
+                    <p style={{ color: '#94a3b8', fontSize: '14px', textAlign: 'center', margin: 0, lineHeight: '1.6', maxWidth: '500px' }}>
+                      {result.ats_score >= 80 ? '🎉 Excellent match! Your resume is highly optimized for this role.' : 
+                       result.ats_score >= 50 ? '⚠️ Good start, but there are key gaps and wording improvements needed to pass ATS screens.' : 
+                       '❌ Critical gaps detected. Your resume is at high risk of being filtered out by ATS systems.'}
+                    </p>
+                  </div>
+
+                  {/* Missing Keywords */}
+                  {result.missing_keywords && result.missing_keywords.length > 0 && (
+                    <div className="card">
+                      <h3 style={{ color: '#fca5a5', marginBottom: '15px', fontSize: '18px' }}>❌ Critical Missing Keywords</h3>
+                      <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '18px' }}>Integrate these terms into your skills and project bullet points to improve search discoverability:</p>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        {result.missing_keywords.map((kw, idx) => (
+                          <span key={idx} style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', padding: '6px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '500' }}>
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Optimized Summary */}
+                  {result.new_summary && (
+                    <div className="card">
+                      <h3 style={{ color: '#a5b4fc', marginBottom: '15px', fontSize: '18px' }}>📝 ATS-Optimized Professional Summary</h3>
+                      <div style={{ background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.2)', padding: '20px', borderRadius: '12px', color: '#cbd5e1', fontStyle: 'italic', lineHeight: '1.6', fontSize: '14px' }}>
+                        "{result.new_summary}"
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Wording Replacements */}
+                  {result.suggestions && result.suggestions.length > 0 && (
+                    <div className="card">
+                      <h3 style={{ color: '#a5b4fc', marginBottom: '20px', fontSize: '18px' }}>💡 Specific Bullet Point Enhancements</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {result.suggestions.map((s, idx) => (
+                          <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                            <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: '#818cf8', fontWeight: 'bold', marginBottom: '12px' }}>
+                              Replacement {idx + 1}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                              <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: '600', textTransform: 'uppercase' }}>Original Wording:</span>
+                              <div style={{ background: 'rgba(239, 68, 68, 0.05)', borderLeft: '3px solid #ef4444', padding: '10px 15px', color: '#94a3b8', fontSize: '14px', borderRadius: '0 8px 8px 0', lineHeight: '1.5' }}>
+                                {s.original}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                              <span style={{ fontSize: '11px', color: '#10b981', fontWeight: '600', textTransform: 'uppercase' }}>Suggested Wording:</span>
+                              <div style={{ background: 'rgba(16, 185, 129, 0.05)', borderLeft: '3px solid #10b981', padding: '10px 15px', color: '#e2e8f0', fontSize: '14px', fontWeight: '500', borderRadius: '0 8px 8px 0', lineHeight: '1.5' }}>
+                                {s.suggested}
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#94a3b8', lineHeight: '1.5' }}>
+                              <strong style={{ color: '#cbd5e1' }}>Reason:</strong> {s.reason}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Apply Optimization Button */}
+                  <button 
+                    className="btn-modern" 
+                    onClick={applyOptimization} 
+                    style={{ marginTop: '10px', width: '100%', padding: '18px', fontSize: '16px', background: 'linear-gradient(to right, #10b981, #059669)', color: 'white', border: 'none', borderRadius: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    ⚡ Apply Optimization to Resume & View PDF
+                  </button>
+                </div>
+              ) : activeTool === 'mock-interview' && typeof result === 'object' && result.domain_scores ? (
+                <div id="resume-print-area" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                  {/* Domain Analysis */}
+                  <div className="card">
+                    <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px', marginBottom: '20px', color: '#a5b4fc' }}>🎯 Domain Strength Analysis</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      {result.domain_scores.map((item, idx) => (
+                        <div key={idx} className="domain-card" style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <strong style={{ fontSize: '16px', color: 'white' }}>{item.domain}</strong>
+                            <span style={{ fontSize: '16px', fontWeight: 'bold', color: item.score >= 80 ? '#10b981' : item.score >= 50 ? '#f59e0b' : '#ef4444' }}>{item.score}%</span>
+                          </div>
+                          <div style={{ width: '100%', background: 'rgba(255, 255, 255, 0.05)', height: '10px', borderRadius: '5px', overflow: 'hidden', marginBottom: '10px' }}>
+                            <div style={{ width: `${item.score}%`, background: 'linear-gradient(to right, #6366f1, #ec4899)', height: '100%', borderRadius: '5px' }}></div>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '14px', color: '#94a3b8', lineHeight: '1.5' }}>{item.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Focus Areas */}
+                  {result.focus_areas && result.focus_areas.length > 0 && (
+                    <div className="card" style={{ borderLeft: '4px solid #ef4444' }}>
+                      <h3 style={{ color: '#fca5a5', marginBottom: '15px' }}>⚠️ Recommended Areas of Focus</h3>
+                      <ul style={{ paddingLeft: '20px', margin: 0, lineHeight: '1.8', color: '#cbd5e1' }}>
+                        {result.focus_areas.map((area, idx) => (
+                          <li key={idx} style={{ marginBottom: '8px' }}>{area}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Q&A Prep */}
+                  {result.interview_questions && result.interview_questions.length > 0 && (
+                    <div className="card">
+                      <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px', marginBottom: '20px', color: '#a5b4fc' }}>
+                        🎤 Highly Important Interview Prep Q&A ({result.interview_questions.length} Questions)
+                      </h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                        {result.interview_questions.map((item, idx) => (
+                          <details key={idx} className="accordion-item" style={{ background: 'rgba(15, 23, 42, 0.3)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '10px', overflow: 'hidden' }}>
+                            <summary className="accordion-header" style={{ padding: '16px', fontWeight: '600', cursor: 'pointer', color: '#e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>Q{idx + 1}: {item.question}</span>
+                            </summary>
+                            <div className="accordion-content" style={{ padding: '16px', background: 'rgba(0,0,0,0.2)', borderTop: '1px solid rgba(255,255,255,0.05)', color: '#cbd5e1', lineHeight: '1.6' }}>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.answer}</ReactMarkdown>
+                            </div>
+                          </details>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Download Prep Package */}
+                  <button className="no-print" style={{ marginTop: '30px', width: '100%', padding: '15px', background: 'linear-gradient(to right, #4f46e5, #7c3aed)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', fontSize: '16px' }} onClick={handleDownload}>
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Download Prep Package (PDF)
+                  </button>
                 </div>
               ) : (
                 <div style={{ padding: '30px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', lineHeight: '1.7', color: '#f8fafc', fontSize: '15px' }}>

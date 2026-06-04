@@ -231,3 +231,57 @@ def extract_career_timeline(raw_text):
 
     timeline.sort(key=get_sort_key, reverse=True)
     return timeline
+
+def extract_evidence_and_keywords(resume_text: str) -> dict:
+    import re
+    cleaned = clean_resume(resume_text)
+    resume_text_lower = resume_text.lower()
+    
+    # 1. Extract potential certification mentions
+    certs_found = []
+    cert_keywords = ['certificat', 'certified', 'credential', 'courseera', 'coursera', 'udemy', 'edx', 'nptel']
+    for line in resume_text.splitlines():
+        line_strip = line.strip()
+        if not line_strip:
+            continue
+        if any(kw in line_strip.lower() for kw in cert_keywords):
+            if len(line_strip) < 200:
+                certs_found.append(line_strip)
+                
+    # 2. Extract potential awards / achievements
+    awards_found = []
+    award_keywords = ['award', 'honor', 'placed', 'rank', 'winner', 'achievement', 'medal', 'hackathon']
+    for line in resume_text.splitlines():
+        line_strip = line.strip()
+        if not line_strip:
+            continue
+        if any(kw in line_strip.lower() for kw in award_keywords):
+            if len(line_strip) < 200:
+                awards_found.append(line_strip)
+
+    # 3. Domain keyword mapping matches
+    domain_keywords = {
+        "Machine Learning & AI": ["machine learning", "deep learning", "nlp", "computer vision", "tensorflow", "pytorch", "scikit-learn", "keras", "neural networks", "artificial intelligence", "cnn", "rnn", "llm", "transformers", "generative ai"],
+        "Web Frontend": ["react", "angular", "vue", "javascript", "typescript", "html", "css", "next.js", "frontend", "bootstrap", "tailwind", "jquery"],
+        "Backend & APIs": ["node.js", "django", "flask", "fastapi", "spring boot", "express.js", "backend", "rest api", "graphql", "apis", "microservices", "spring", "express"],
+        "Databases & Data Engineering": ["sql", "mysql", "postgresql", "mongodb", "redis", "cassandra", "database", "oracle", "spark", "hadoop", "kafka", "etl", "data warehouse"],
+        "Cloud & DevOps": ["aws", "azure", "gcp", "docker", "kubernetes", "jenkins", "ci/cd", "terraform", "ansible", "cloud", "devops"],
+        "Mobile Development": ["android", "ios", "react native", "flutter", "swift", "kotlin", "mobile app"]
+    }
+    
+    domain_matches = {}
+    for domain, keywords in domain_keywords.items():
+        found = []
+        for kw in keywords:
+            pattern = r'\b' + re.escape(kw) + r'\b'
+            if re.search(pattern, resume_text_lower):
+                found.append(kw)
+        if found:
+            domain_matches[domain] = found
+            
+    return {
+        "certifications": certs_found[:10],
+        "awards": awards_found[:10],
+        "domain_matches": domain_matches
+    }
+
