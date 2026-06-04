@@ -171,66 +171,92 @@ label {
 }
 
 /* Print/Download Styles for AI Resume Builder */
+body.printing-active #root {
+  display: none !important;
+}
+
+body.printing-active .print-container-temp {
+  display: block !important;
+  width: 100%;
+  background: #ffffff !important;
+  color: #111827 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-family: 'Outfit', sans-serif !important;
+}
+
 @media print {
-  /* Set body to standard white and hide all normal elements */
-  body, html, #root {
+  @page {
+    size: letter;
+    margin: 20mm 15mm 20mm 15mm;
+  }
+
+  body, html {
     background: #ffffff !important;
     background-image: none !important;
     color: #111827 !important;
-  }
-
-  body * {
-    visibility: hidden;
-  }
-
-  /* Make only the resume area visible */
-  #resume-print-area, #resume-print-area * {
-    visibility: visible;
-  }
-
-  /* Position it perfectly at the top left */
-  #resume-print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
     margin: 0 !important;
     padding: 0 !important;
-    background: #ffffff !important;
-    color: #111827 !important;
-    border: none !important;
-    box-shadow: none !important;
   }
 
-  /* Clean up resume components for professional white-paper printing */
+  /* Make sure the temp container is styled correctly */
+  .print-container-temp {
+    background: #ffffff !important;
+    color: #111827 !important;
+    width: 100% !important;
+  }
+
   .resume-container {
     background: #ffffff !important;
     color: #111827 !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    font-family: 'Outfit', sans-serif !important;
   }
 
   .resume-header {
     border-bottom: 2px solid #e5e7eb !important;
+    padding-bottom: 15px !important;
+    margin-bottom: 20px !important;
+    text-align: center !important;
   }
 
   .resume-header h1, .resume-name {
     color: #111827 !important;
+    font-size: 26px !important;
+    margin-bottom: 8px !important;
+    font-weight: 800 !important;
   }
 
   .resume-contact, .resume-contact span {
     color: #4b5563 !important;
+    font-size: 13px !important;
+  }
+
+  .resume-section {
+    margin-bottom: 24px !important;
+    page-break-inside: avoid;
+  }
+
+  .resume-section-header {
+    margin-bottom: 12px !important;
   }
 
   .resume-section-bar {
     background: #4f46e5 !important;
+    width: 3px !important;
+    height: 16px !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
   .resume-section-title {
     color: #4f46e5 !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
   }
 
   .resume-section-divider {
@@ -239,16 +265,35 @@ label {
 
   .resume-summary-text {
     color: #1f2937 !important;
+    font-size: 13.5px !important;
+    line-height: 1.6 !important;
+  }
+
+  .resume-skills-list {
+    gap: 10px !important;
+  }
+
+  .resume-skills-row {
+    align-items: flex-start !important;
+    gap: 15px !important;
   }
 
   .resume-skills-category {
     color: #374151 !important;
+    font-size: 13px !important;
+    width: 120px !important;
+    min-width: 120px !important;
+    flex-shrink: 0 !important;
+    font-weight: 700 !important;
   }
 
   .resume-skill-badge {
     background: #f3f4f6 !important;
     border: 1px solid #d1d5db !important;
     color: #1f2937 !important;
+    padding: 3px 8px !important;
+    font-size: 11.5px !important;
+    border-radius: 20px !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -257,18 +302,24 @@ label {
     background: transparent !important;
     border: 1px solid #e5e7eb !important;
     padding: 15px !important;
-    margin-bottom: 10px !important;
+    margin-bottom: 12px !important;
+    border-radius: 8px !important;
     page-break-inside: avoid;
   }
 
   .resume-project-title {
     color: #111827 !important;
+    font-size: 15px !important;
+    font-weight: 700 !important;
   }
 
   .resume-project-tech {
     background: #f0f9ff !important;
     border: 1px solid #bae6fd !important;
     color: #0369a1 !important;
+    border-radius: 4px !important;
+    padding: 2px 6px !important;
+    font-size: 11px !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -276,12 +327,19 @@ label {
   .resume-project-year {
     color: #4b5563 !important;
     background: #f3f4f6 !important;
+    border: 1px solid #e5e7eb !important;
+    font-size: 12px !important;
+    border-radius: 15px !important;
+    padding: 2px 8px !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
   .resume-project-bullet {
     color: #374151 !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    margin-bottom: 6px !important;
   }
 
   .resume-project-bullet-dot {
@@ -292,14 +350,18 @@ label {
 
   .resume-education-degree {
     color: #111827 !important;
+    font-size: 13.5px !important;
+    font-weight: 700 !important;
   }
 
   .resume-education-details {
     color: #4b5563 !important;
+    font-size: 12.5px !important;
   }
 
   .resume-cert-item {
     color: #374151 !important;
+    font-size: 13px !important;
   }
 
   /* Hide print buttons and extra components inside print container */

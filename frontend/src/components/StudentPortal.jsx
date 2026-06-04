@@ -77,6 +77,19 @@ export default function StudentPortal({ onExit }) {
   };
 
   const handleDownload = () => {
+    const resumeEl = document.getElementById('resume-print-area');
+    if (!resumeEl) return;
+
+    // Create a temporary container for printing to prevent main layout offsets
+    const printContainer = document.createElement('div');
+    printContainer.id = 'print-container-temp';
+    printContainer.className = 'print-container-temp';
+    printContainer.innerHTML = resumeEl.innerHTML;
+
+    // Append to body and mark printing state
+    document.body.appendChild(printContainer);
+    document.body.classList.add('printing-active');
+
     const originalTitle = document.title;
     try {
       const parsed = JSON.parse(result);
@@ -84,8 +97,13 @@ export default function StudentPortal({ onExit }) {
         document.title = `${parsed.name.replace(/\s+/g, '_')}_Resume`;
       }
     } catch (e) {}
+
     window.print();
+
+    // Restore original title and remove temp container
     document.title = originalTitle;
+    document.body.removeChild(printContainer);
+    document.body.classList.remove('printing-active');
   };
 
   return (
@@ -286,8 +304,8 @@ export default function StudentPortal({ onExit }) {
                             <div className="resume-skills-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '0 10px' }}>
                               {Object.entries(parsed.skills).map(([cat, skillsArr]) => (
                                 skillsArr && skillsArr.length > 0 && (
-                                  <div key={cat} className="resume-skills-row" style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-                                    <strong className="resume-skills-category" style={{ color: '#94a3b8', fontSize: '13px', textTransform: 'capitalize', width: '90px' }}>{cat}:</strong>
+                                  <div key={cat} className="resume-skills-row" style={{ display: 'flex', alignItems: 'flex-start', gap: '15px', flexWrap: 'wrap' }}>
+                                    <strong className="resume-skills-category" style={{ color: '#94a3b8', fontSize: '13px', textTransform: 'capitalize', width: '120px', flexShrink: 0 }}>{cat}:</strong>
                                     <div className="resume-skills-tags" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                       {skillsArr.map((skill, i) => (
                                         <span key={i} className="resume-skill-badge" style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#a5b4fc', padding: '4px 10px', borderRadius: '20px', fontSize: '12px' }}>{skill}</span>
