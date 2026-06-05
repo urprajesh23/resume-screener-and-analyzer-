@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
+import InteractiveMockInterview from './InteractiveMockInterview';
 export default function StudentPortal({ onExit }) {
   const [activeTool, setActiveTool] = useState('resume-builder');
   const [loading, setLoading] = useState(false);
@@ -16,6 +16,9 @@ export default function StudentPortal({ onExit }) {
   const [miData, setMiData] = useState({ resume_text: '', jd_text: '', company_name: '', role: '' });
   const [piData, setPiData] = useState({ skill: '', level: 'Complete Beginner' });
   const [generatedResume, setGeneratedResume] = useState(null);
+  const [interactiveMockQuestions, setInteractiveMockQuestions] = useState(null);
+  const [interactiveMockResults, setInteractiveMockResults] = useState(null);
+
 
   useEffect(() => {
     if (activeTool === 'resume-builder' && result) {
@@ -181,6 +184,33 @@ export default function StudentPortal({ onExit }) {
     } catch (error) {
       console.error(error);
       setResult('Error connecting to backend.');
+    }
+    setLoading(false);
+  };
+
+  const startInteractiveMockInterview = async (payload) => {
+    setLoading(true);
+    setInteractiveMockQuestions(null);
+    setInteractiveMockResults(null);
+    try {
+      const response = await fetch(`http://localhost:8000/api/student/mock-interview/questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (response.ok) {
+        if (data.questions && data.questions.length > 0) {
+          setInteractiveMockQuestions(data.questions);
+        } else {
+          alert('Error: No questions generated.');
+        }
+      } else {
+        alert('Error: ' + data.detail);
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Error connecting to backend.');
     }
     setLoading(false);
   };
@@ -359,8 +389,51 @@ export default function StudentPortal({ onExit }) {
               <input type="text" value={miData.role} onChange={e => setMiData({...miData, role: e.target.value})} placeholder="e.g. Machine Learning Engineer, Backend Developer" />
 
               <button className="btn-modern" onClick={() => submitToAPI('interview-prep', miData)} disabled={loading} style={{ marginTop: '20px', width: '100%' }}>
-                {loading ? '⏳ Analyzing & Generating...' : '✨ Generate Prep Package & Analyze Domains'}
+                {loading && !interactiveMockQuestions ? '⏳ Analyzing & Generating...' : '✨ Generate Prep Package & Analyze Domains'}
               </button>
+              
+              <hr style={{margin: '30px 0', borderColor: 'rgba(255,255,255,0.1)'}} />
+              
+              <h2>🎙️ Interactive Audio Mock Interview</h2>
+              <p style={{color: '#94a3b8', marginBottom: '20px'}}>Practice with an AI interviewer. It will ask 5 questions based on your resume and JD, and score your spoken answers.</p>
+              
+              {!interactiveMockQuestions && !interactiveMockResults && (
+                <button className="btn-modern" onClick={() => startInteractiveMockInterview(miData)} disabled={loading} style={{ width: '100%', background: 'linear-gradient(to right, #ec4899, #f43f5e)' }}>
+                  {loading ? '⏳ Generating Questions...' : '🎙️ Start Interactive Audio Interview'}
+                </button>
+              )}
+              
+              {interactiveMockQuestions && !interactiveMockResults && (
+                <InteractiveMockInterview 
+                  questions={interactiveMockQuestions} 
+                  onComplete={(res) => setInteractiveMockResults(res)} 
+                  onCancel={() => { setInteractiveMockQuestions(null); setInteractiveMockResults(null); }}
+                />
+              )}
+              
+              {interactiveMockResults && (
+                <div style={{ background: '#1e2235', padding: '30px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', marginTop: '20px' }}>
+                  <h3 style={{ color: '#10b981', marginBottom: '20px' }}>✅ Interview Complete! Here is your scorecard.</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {interactiveMockResults.map((res, i) => (
+                      <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '20px', borderRadius: '8px' }}>
+                        <h4 style={{ color: '#e2e8f0', margin: '0 0 10px 0' }}>Q{i+1}: {res.question}</h4>
+                        <div style={{ color: '#a5b4fc', fontSize: '14px', marginBottom: '10px' }}><strong>Ideal Answer:</strong> {res.ideal_answer}</div>
+                        <div style={{ color: '#cbd5e1', fontSize: '14px', fontStyle: 'italic', marginBottom: '15px' }}><strong>Your Answer:</strong> "{res.transcript}"</div>
+                        <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-start' }}>
+                          <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '10px', borderRadius: '8px', fontWeight: 'bold', fontSize: '18px', flexShrink: 0 }}>
+                            {res.score}/10
+                          </div>
+                          <div style={{ color: '#e2e8f0', fontSize: '14px', lineHeight: '1.5' }}>
+                            <strong>Feedback:</strong> {res.feedback}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => { setInteractiveMockQuestions(null); setInteractiveMockResults(null); }} className="btn-modern" style={{ marginTop: '20px', width: '100%' }}>Restart Interview</button>
+                </div>
+              )}
             </>
           )}
 

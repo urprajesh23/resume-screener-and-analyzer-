@@ -548,3 +548,53 @@ Return exactly this JSON object:
         fallback["summary"] = f"{fallback['summary']} Gemini was unavailable, so this was generated locally."
         return fallback
 
+def get_mock_interview_model():
+    # Using the primary GEMINI_API_KEY as requested
+    return get_model()
+
+def generate_mock_interview_questions(resume_text: str, jd_text: str) -> list:
+    model = get_mock_interview_model()
+    prompt = f'''
+Act as a Senior Hiring Manager. Based on the candidate's resume and the JD, generate exactly 5 highly specific interview questions (3 technical/role-specific, 2 behavioral).
+Resume:
+{resume_text}
+
+JD:
+{jd_text}
+
+Return your response ONLY as a VALID JSON array of exactly 5 objects. Do not include markdown headers or commentary.
+Schema for each object:
+{{
+  "question": "The interview question",
+  "ideal_answer": "Brief explanation of what a 'good answer' should include"
+}}
+'''
+    try:
+        config = types.GenerateContentConfig(response_mime_type="application/json")
+        response = generate_with_retry(model, prompt, config=config)
+        text = response.text.strip()
+        import re
+        text = re.sub(r'^```json\s*', '', text)
+        text = re.sub(r'```$', '', text).strip()
+        return json.loads(text)
+    except Exception as e:
+        print("Error in generate_mock_interview_questions:", e)
+        raise Exception(f"Failed to generate questions. Model error: {str(e)}")
+
+def evaluate_mock_interview_answer(question: str, ideal_answer: str, user_transcript: str) -> str:
+    model = get_mock_interview_model()
+    prompt = f'''
+Evaluate the user's answer to the interview question.
+Question: {question}
+Ideal Answer Criteria: {ideal_answer}
+User's Answer: {user_transcript}
+
+Provide 1-2 concise sentences of constructive feedback. Be direct and helpful.
+'''
+    try:
+        response = generate_with_retry(model, prompt)
+        return response.text.strip()
+    except Exception as e:
+        print("Error in evaluate_mock_interview_answer:", e)
+        return "Could not evaluate answer due to API error."
+

@@ -43,3 +43,12 @@ class InterviewPrepRequest(BaseModel):
 class ProjectIdeaRequest(BaseModel):
     skill: str
     level: str
+
+class MockInterviewQuestionsRequest(BaseModel):
+    resume_text: str
+    jd_text: str
+
+class MockInterviewEvaluateRequest(BaseModel):
+    question: str
+    ideal_answer: str
+    user_transcript: str

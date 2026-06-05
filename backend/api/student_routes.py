@@ -1,7 +1,8 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from backend.models.schemas import (
     ResumeBuilderRequest, CareerCoachRequest, JobSearchRequest,
-    CoverLetterRequest, ATSBoosterRequest, InterviewPrepRequest, ProjectIdeaRequest
+    CoverLetterRequest, ATSBoosterRequest, InterviewPrepRequest, ProjectIdeaRequest,
+    MockInterviewQuestionsRequest, MockInterviewEvaluateRequest
 )
 import backend.services.gemini_service as gemini_service
 import backend.services.resume_parser as resume_parser
@@ -69,5 +70,34 @@ async def project_idea(request: ProjectIdeaRequest):
     try:
         result = gemini_service.project_idea_generator(request.skill, request.level)
         return {"blueprint": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/mock-interview/questions")
+async def mock_interview_questions(request: MockInterviewQuestionsRequest):
+    try:
+        questions = gemini_service.generate_mock_interview_questions(request.resume_text, request.jd_text)
+        return {"questions": questions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/mock-interview/evaluate-transcript")
+async def mock_interview_evaluate_transcript(request: MockInterviewEvaluateRequest):
+    try:
+        import backend.services.ml_service as ml_service
+        
+        # 1. Calculate local similarity score (0-10) using sentence transformers
+        raw_score = ml_service.calculate_match_score(request.ideal_answer, request.user_transcript)
+        score_out_of_10 = round((raw_score / 100) * 10, 1)
+        
+        # 2. Get brief qualitative feedback from Gemini
+        feedback = gemini_service.evaluate_mock_interview_answer(
+            request.question, request.ideal_answer, request.user_transcript
+        )
+        
+        return {
+            "score": score_out_of_10,
+            "feedback": feedback
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
