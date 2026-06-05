@@ -61,9 +61,64 @@ async def upload_resumes(
                 "missing_skills": skill_gap['missing_skills'],
                 "summary": gemini_analysis.get("summary", ""),
                 "career_progression": gemini_analysis.get("career_progression", ""),
-                "career_timeline": timeline
+                "career_timeline": timeline,
+                "resume_text": text
             })
             
         return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+from pydantic import BaseModel
+from typing import List, Optional
+import backend.services.hr_services as hr_services
+
+class HREmailRequest(BaseModel):
+    candidate_name: str
+    score: float
+    matched: List[str]
+    missing: List[str]
+    email_type: str
+
+class HRGuideRequest(BaseModel):
+    resume_text: str
+    jd_text: str
+    candidate_name: str
+
+class HRBooleanRequest(BaseModel):
+    jd_text: str
+
+@router.post("/generate-email")
+async def generate_email(request: HREmailRequest):
+    try:
+        email_body = hr_services.generate_candidate_email(
+            candidate_name=request.candidate_name,
+            score=request.score,
+            matched=request.matched,
+            missing=request.missing,
+            email_type=request.email_type
+        )
+        return {"email": email_body}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/generate-guide")
+async def generate_guide(request: HRGuideRequest):
+    try:
+        guide = hr_services.generate_interviewer_guide(
+            resume_text=request.resume_text,
+            jd_text=request.jd_text,
+            candidate_name=request.candidate_name
+        )
+        return guide
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/generate-boolean")
+async def generate_boolean(request: HRBooleanRequest):
+    try:
+        queries = hr_services.generate_boolean_query(jd_text=request.jd_text)
+        return queries
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

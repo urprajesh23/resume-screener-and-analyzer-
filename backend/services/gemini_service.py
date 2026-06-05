@@ -3,12 +3,14 @@ from google import genai
 from google.genai import types
 import json
 import urllib.parse
+import re
 import time
 import threading
 
 # Global rate limiter state
 _last_request_time = 0.0
 _rate_limit_lock = threading.Lock()
+_GEMINI_MODEL = 'gemini-2.5-flash-lite'
 
 def _wait_for_rate_limit():
     global _last_request_time
@@ -25,12 +27,13 @@ def generate_with_retry(model, prompt, config=None, max_retries=3):
     for attempt in range(max_retries):
         _wait_for_rate_limit()
         try:
-            return model.models.generate_content(model='gemini-2.5-flash', contents=prompt, config=config)
+            return model.models.generate_content(model=_GEMINI_MODEL, contents=prompt, config=config)
         except Exception as e:
             error_str = str(e)
             if "429" in error_str and attempt < max_retries - 1:
                 match = re.search(r'retry in (\d+\.?\d*)s', error_str)
-                delay = float(match.group(1)) + 1 if match else 35.0
+                delay = float(match.group(1)) + 1 if match else 10.0
+                delay = min(delay, 10.0)
                 print(f"Rate limit hit. Retrying in {delay:.2f} seconds (Attempt {attempt + 1}/{max_retries})...")
                 time.sleep(delay)
             else:
@@ -41,6 +44,103 @@ def get_model():
     if not api_key or api_key == "your_gemini_api_key_here":
         raise Exception("Gemini API key is not configured.")
     return genai.Client(api_key=api_key)
+
+def _compact_text_for_hr(text: str, max_chars: int) -> str:
+    if not text:
+        return ""
+
+    lines = []
+    for raw_line in text.splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            continue
+        lines.append(line)
+
+    if not lines:
+        return ""
+
+    priority_markers = (
+        "experience",
+        "education",
+        "skills",
+        "project",
+        "intern",
+        "developer",
+        "engineer",
+        "analyst",
+        "manager",
+        "python",
+        "java",
+        "react",
+        "sql",
+        "aws",
+        "docker",
+        "kubernetes",
+    )
+    date_pattern = re.compile(r"\b(?:19|20)\d{2}\b|present|current", re.IGNORECASE)
+
+    compact_lines = []
+    for line in lines:
+        lowered = line.lower()
+        if len(line) > 140:
+            continue
+        if date_pattern.search(line) or any(marker in lowered for marker in priority_markers):
+            compact_lines.append(line)
+
+    if len(compact_lines) < 6:
+        compact_lines.extend(lines[:12])
+
+    deduped = []
+    seen = set()
+    for line in compact_lines:
+        key = line.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(line)
+
+    compact_text = " | ".join(deduped)
+    return compact_text[:max_chars]
+
+
+def _build_local_hr_analysis(resume_text: str, jd_text: str, custom_skills: str = "") -> dict:
+    import backend.services.ml_service as ml_service
+
+    candidate_info = ml_service.extract_candidate_info(resume_text)
+    if custom_skills.strip():
+        skill_gap = ml_service.analyze_custom_skill_gap(resume_text, custom_skills)
+        focus_label = "the provided skill list"
+    else:
+        skill_gap = ml_service.analyze_skill_gap(resume_text, jd_text)
+        focus_label = "the job description"
+
+    matched_skills = skill_gap.get("matched_skills", [])
+    missing_skills = skill_gap.get("missing_skills", [])
+    timeline = ml_service.extract_career_timeline(resume_text)
+    category = ml_service.predict_category(resume_text)
+
+    name = re.sub(r"\s+", " ", candidate_info.get("name") or "The candidate").strip()
+    primary_skills = ", ".join(matched_skills[:5]) if matched_skills else "relevant technical skills"
+    missing_focus = ", ".join(missing_skills[:4]) if missing_skills else "no major keyword gaps detected"
+
+    summary = (
+        f"{name} appears aligned with {focus_label} and shows experience in {primary_skills}. "
+        f"The local ML category estimate is {category}."
+    )
+
+    if len(timeline) >= 2:
+        career_progression = f"{len(timeline)} dated experience entries suggest steady progression across multiple roles."
+    elif len(timeline) == 1:
+        career_progression = "One dated role was found, so progression appears limited in the available resume text."
+    else:
+        career_progression = "No clear date ranges were found, so career progression could not be confirmed from the resume text."
+
+    summary = f"{summary} Key gaps: {missing_focus}."
+
+    return {
+        "summary": summary,
+        "career_progression": career_progression,
+    }
 
 def generate_cover_letter(name: str, resume_text: str, jd_text: str) -> str:
     model = get_model()
@@ -383,51 +483,57 @@ def analyze_resume_for_hr(resume_text: str, jd_text: str, custom_skills: str = "
         model = get_model()
     except Exception as e:
         print("Error initializing Gemini model for HR Analysis:", e)
-        return {
-            "candidate_name": "Unknown",
-            "email": "Unknown",
-            "phone": "Unknown",
-            "match_score_percentage": 0,
-            "matched_skills": [],
-            "missing_skills": [],
-            "summary": "Analysis unavailable because the Gemini API key is not configured.",
-            "career_progression": "Unknown",
-            "career_timeline": []
-        }
+        return _build_local_hr_analysis(resume_text, jd_text, custom_skills)
+
+    import backend.services.ml_service as ml_service
+
+    candidate_info = ml_service.extract_candidate_info(resume_text)
+    if custom_skills.strip():
+        skill_gap = ml_service.analyze_custom_skill_gap(resume_text, custom_skills)
+        focus_label = "the provided skill list"
+    else:
+        skill_gap = ml_service.analyze_skill_gap(resume_text, jd_text)
+        focus_label = "the job description"
+
+    matched_skills = skill_gap.get("matched_skills", [])
+    missing_skills = skill_gap.get("missing_skills", [])
+    timeline = ml_service.extract_career_timeline(resume_text)
+    category = ml_service.predict_category(resume_text)
+
+    resume_snapshot = _compact_text_for_hr(resume_text, 1200)
+    jd_snapshot = _compact_text_for_hr(jd_text, 700)
+
+    candidate_name = re.sub(r"\s+", " ", candidate_info.get("name") or "Unknown").strip()
 
     prompt = f'''
-You are an expert HR Applicant Tracking System evaluator.
-Analyze the following candidate resume against the provided Job Description.
+You are writing a compact HR analysis from pre-extracted facts.
+Use only the facts below and return ONLY valid JSON.
 
-Candidate Resume:
-{resume_text}
+Candidate name: {candidate_name}
+Local ML category: {category}
+Matched skills: {json.dumps(matched_skills[:8])}
+Missing skills: {json.dumps(missing_skills[:8])}
+Timeline entries: {len(timeline)}
+Resume snapshot: {resume_snapshot}
+Job description snapshot: {jd_snapshot}
 
-Target Job Description:
-{jd_text}
+Write:
+1. summary: 1-2 concise sentences tailored to {focus_label}.
+2. career_progression: 1 concise sentence about the candidate's trajectory, or say the timeline is limited if there are no clear date ranges.
 
-Custom Required Skills (if any, prioritize these over JD skills):
-{custom_skills}
-
-Perform a comprehensive analysis and return the result ONLY as a valid JSON object with no markdown wrappers or formatting blocks. Use the exact following structure:
+Return exactly this JSON object:
 {{
-  "candidate_name": "string",
-  "email": "string",
-  "phone": "string",
-  "match_score_percentage": number (0-100 indicating semantic match quality),
-  "matched_skills": ["string", "string"],
-  "missing_skills": ["string", "string"],
-  "summary": "A concise 2-sentence summary of the candidate's profile.",
-  "career_progression": "A brief note on their role trajectory (e.g., '1 promotion from Intern to Developer').",
-  "career_timeline": [
-    {{"date": "Jan 2020 - Present", "context": "Software Engineer at TechCorp"}},
-    {{"date": "2018 - 2020", "context": "Junior Developer at Startup"}}
-  ]
+  "summary": "...",
+  "career_progression": "..."
 }}
-
-Ensure the JSON is strictly valid. Do NOT return anything outside the JSON object.
 '''
     try:
-        response = generate_with_retry(model, prompt)
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0,
+            max_output_tokens=120,
+        )
+        response = generate_with_retry(model, prompt, config=config, max_retries=1)
         text = response.text.strip()
         if text.startswith("```json"):
             text = text[7:]
@@ -435,18 +541,10 @@ Ensure the JSON is strictly valid. Do NOT return anything outside the JSON objec
             text = text[3:]
         if text.endswith("```"):
             text = text[:-3]
-        import json
         return json.loads(text.strip())
     except Exception as e:
         print("Error in Gemini HR Analysis:", e)
-        return {
-            "candidate_name": "Unknown",
-            "email": "Unknown",
-            "phone": "Unknown",
-            "match_score_percentage": 0,
-            "matched_skills": [],
-            "missing_skills": [],
-            "summary": "Analysis failed due to AI API format error.",
-            "career_progression": "Unknown",
-            "career_timeline": []
-        }
+        fallback = _build_local_hr_analysis(resume_text, jd_text, custom_skills)
+        fallback["summary"] = f"{fallback['summary']} Gemini was unavailable, so this was generated locally."
+        return fallback
+

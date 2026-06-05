@@ -16,6 +16,96 @@ export default function HRDashboard({ onExit }) {
   const [expandedId, setExpandedId] = useState(null);
   const [activeTabs, setActiveTabs] = useState({});
 
+  // Sourcing & Assistant states
+  const [booleanQueries, setBooleanQueries] = useState(null);
+  const [loadingBoolean, setLoadingBoolean] = useState(false);
+  const [showBooleanModal, setShowBooleanModal] = useState(false);
+
+  // Candidate Actions states
+  const [emailType, setEmailType] = useState({});
+  const [emailDraft, setEmailDraft] = useState({});
+  const [emailLoading, setEmailLoading] = useState({});
+
+  const [interviewerGuide, setInterviewerGuide] = useState({});
+  const [guideLoading, setGuideLoading] = useState({});
+
+  const handleGenerateBoolean = async () => {
+    if (!jdText) return;
+    setLoadingBoolean(true);
+    try {
+      const response = await fetch('http://localhost:8000/api/hr/generate-boolean', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jd_text: jdText })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setBooleanQueries(data);
+        setShowBooleanModal(true);
+      } else {
+        alert("Error: " + data.detail);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Error connecting to server to build Boolean query.");
+    }
+    setLoadingBoolean(false);
+  };
+
+  const handleGenerateEmail = async (candidateIndex) => {
+    const cand = sortedResults[candidateIndex];
+    setEmailLoading(prev => ({ ...prev, [candidateIndex]: true }));
+    try {
+      const response = await fetch('http://localhost:8000/api/hr/generate-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidate_name: cand.candidate_name || cand.filename,
+          score: cand.match_score,
+          matched: cand.matched_skills || [],
+          missing: cand.missing_skills || [],
+          email_type: emailType[candidateIndex] || 'interview'
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setEmailDraft(prev => ({ ...prev, [candidateIndex]: data.email }));
+      } else {
+        alert("Error: " + data.detail);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Error generating email draft.");
+    }
+    setEmailLoading(prev => ({ ...prev, [candidateIndex]: false }));
+  };
+
+  const handleGenerateGuide = async (candidateIndex) => {
+    const cand = sortedResults[candidateIndex];
+    setGuideLoading(prev => ({ ...prev, [candidateIndex]: true }));
+    try {
+      const response = await fetch('http://localhost:8000/api/hr/generate-guide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resume_text: cand.resume_text || "",
+          jd_text: jdText || "Job Description",
+          candidate_name: cand.candidate_name || cand.filename
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setInterviewerGuide(prev => ({ ...prev, [candidateIndex]: data }));
+      } else {
+        alert("Error: " + data.detail);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Error generating interviewer guide.");
+    }
+    setGuideLoading(prev => ({ ...prev, [candidateIndex]: false }));
+  };
+
   const startResizing = useCallback((e) => {
     setIsResizing(true);
   }, []);
@@ -154,6 +244,7 @@ export default function HRDashboard({ onExit }) {
             <button onClick={handleAnalyze} disabled={loading} style={{ background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)', color: 'white', padding: '16px', borderRadius: '10px', border: 'none', fontWeight: 'bold', fontSize: '1.1rem', cursor: loading ? 'not-allowed' : 'pointer', marginTop: 'auto', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)' }}>
               {loading ? '⏳ Processing...' : '⚡ Analyze Resumes'}
             </button>
+
           </>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '30px', marginTop: '50px' }}>
@@ -296,8 +387,8 @@ export default function HRDashboard({ onExit }) {
                       </div>
 
                       {/* Tabs */}
-                      <div style={{ display: 'flex', gap: '30px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '30px', paddingBottom: '2px' }}>
-                        {['Skill Gap Analysis', 'Extracted Resume Info', 'Career Progression', 'Career Timeline'].map(tab => {
+                      <div style={{ display: 'flex', gap: '30px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '30px', paddingBottom: '2px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+                        {['Skill Gap Analysis', 'Extracted Resume Info', 'Career Progression', 'Career Timeline', 'AI Email Assistant', 'Interviewer Guide'].map(tab => {
                           const isActive = (activeTabs[i] || 'Skill Gap Analysis') === tab;
                           return (
                             <div 
@@ -402,6 +493,86 @@ export default function HRDashboard({ onExit }) {
                         </div>
                       )}
 
+                      {((activeTabs[i] || 'Skill Gap Analysis') === 'AI Email Assistant') && (
+                        <div>
+                          <h4 style={{ marginBottom: '15px', fontSize: '1.1rem', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '8px' }}>📧 AI Recruiter Email Assistant</h4>
+                          <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '20px' }}>Select an email purpose to draft a personalized message for this candidate:</p>
+                          
+                          <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
+                            <select 
+                              value={emailType[i] || 'interview'} 
+                              onChange={(e) => setEmailType({...emailType, [i]: e.target.value})}
+                              style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid #334155', color: 'white', padding: '10px 15px', borderRadius: '8px', minWidth: '200px' }}
+                            >
+                              <option value="interview">📅 Invite for Interview</option>
+                              <option value="info">📋 Request More Information</option>
+                              <option value="rejection">✉️ Polite Constructive Rejection</option>
+                            </select>
+                            
+                            <button 
+                              onClick={() => handleGenerateEmail(i)}
+                              disabled={emailLoading[i]}
+                              style={{ background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)', color: 'white', padding: '10px 20px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: emailLoading[i] ? 'not-allowed' : 'pointer' }}
+                            >
+                              {emailLoading[i] ? '⏳ Drafting...' : '🪄 Generate Email Draft'}
+                            </button>
+                          </div>
+
+                          {emailDraft[i] && (
+                            <div style={{ background: 'rgba(15, 23, 42, 0.4)', padding: '20px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)', marginTop: '20px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                <strong style={{ color: '#a5b4fc', fontSize: '0.9rem' }}>Generated Draft:</strong>
+                                <button 
+                                  onClick={() => { navigator.clipboard.writeText(emailDraft[i]); alert('Email draft copied to clipboard!'); }}
+                                  style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', color: '#a5b4fc', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}
+                                >
+                                  Copy to Clipboard
+                                </button>
+                              </div>
+                              <textarea 
+                                value={emailDraft[i]} 
+                                onChange={(e) => setEmailDraft({...emailDraft, [i]: e.target.value})}
+                                style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid #334155', color: '#cbd5e1', padding: '15px', borderRadius: '8px', fontSize: '0.9rem', lineHeight: '1.6', resize: 'vertical' }} 
+                                rows="10" 
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {((activeTabs[i] || 'Skill Gap Analysis') === 'Interviewer Guide') && (
+                        <div>
+                          <h4 style={{ marginBottom: '15px', fontSize: '1.1rem', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '8px' }}>📋 Targeted Interviewer Prep Guide</h4>
+                          <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '20px' }}>Generate candidate-specific interview questions with evaluation criteria and rubrics:</p>
+
+                          <button 
+                            onClick={() => handleGenerateGuide(i)}
+                            disabled={guideLoading[i]}
+                            style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', padding: '12px 24px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: guideLoading[i] ? 'not-allowed' : 'pointer', marginBottom: '20px' }}
+                          >
+                            {guideLoading[i] ? '⏳ Building Rubric...' : '📋 Build Interviewer Guide'}
+                          </button>
+
+                          {interviewerGuide[i] && interviewerGuide[i].questions && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                              {interviewerGuide[i].questions.map((q, qIdx) => (
+                                <div key={qIdx} style={{ background: 'rgba(15, 23, 42, 0.4)', padding: '20px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                    <strong style={{ color: '#a5b4fc', fontSize: '1rem' }}>Question {qIdx + 1}</strong>
+                                    <span style={{ fontSize: '0.75rem', background: q.type === 'Technical' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(168, 85, 247, 0.15)', color: q.type === 'Technical' ? '#38bdf8' : '#c084fc', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold' }}>{q.type}</span>
+                                  </div>
+                                  <p style={{ fontSize: '1rem', color: '#cbd5e1', fontWeight: '500', marginBottom: '15px', lineHeight: '1.5' }}>{q.question}</p>
+                                  <div style={{ background: 'rgba(0,0,0,0.15)', padding: '12px 15px', borderRadius: '8px', borderLeft: '3px solid #10b981' }}>
+                                    <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 'bold', display: 'block', textTransform: 'uppercase', marginBottom: '5px' }}>Evaluation Rubric:</span>
+                                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8', lineHeight: '1.5' }}>{q.ideal_answer}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                     </div>
                   )}
                 </div>
@@ -410,6 +581,7 @@ export default function HRDashboard({ onExit }) {
           </>
         )}
       </div>
+
     </div>
   );
 }
